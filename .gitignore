@@ -114,3 +114,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# user defined
+package-lock.json
+node_modules/

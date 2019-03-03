@@ -9,7 +9,7 @@ Not implemented yet.
 
 
 ## Usage
-This repo contains a submodule(WebDriverAgent), So the clone command is
+This repo contains a submodule(WebDriverAgent), So the clone command should be
 
 ```bash
 git clone https://github.com/openatx/atxserver2-ios-provider --recursive 
