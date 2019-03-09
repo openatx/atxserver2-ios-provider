@@ -36,3 +36,7 @@ def fix_url(url, scheme=None):
 def id_generator(length=10):
     return ''.join(
         random.choices(string.ascii_uppercase + string.digits, k=length))
+
+
+if __name__ == "__main__":
+    print("current ip:", current_ip())

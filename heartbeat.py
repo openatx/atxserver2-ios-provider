@@ -10,7 +10,7 @@ from tornado.queues import Queue
 from tornado import websocket
 from tornado import gen
 
-from utils import update_recursive
+from utils import update_recursive, current_ip
 
 
 async def heartbeat_connect(*args, **kwargs):
@@ -146,7 +146,7 @@ async def async_main():
         "udid": "kj3rklzvlkjsdfawefw",
         "colding": False,
         "provider": {
-            "wdaUrl": "http://10.240.173.218:18000/127.0.0.1:8100"
+            "wdaUrl": "http://"+current_ip()+":18000/127.0.0.1:8100"
         }
     })
     while True:
