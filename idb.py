@@ -4,6 +4,7 @@
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
+import requests
 import tornado.ioloop
 from logzero import logger
 from tornado import gen
@@ -110,19 +111,54 @@ class IDevice(object):
         self.udid = udid
         self.name = udid2name(udid)
         self.product = udid2product(udid)
+        self._procs = []
+
+    def __repr__(self):
+        return "{udid}: {name} {product}".format(udid=self.udid, name=self.name, product=self.product)
 
     def run_webdriveragent(self):
         """
+        UDID=$(idevice_id -l)
+        UDID=${UDID:?}
         xcodebuild -project WebDriverAgent.xcodeproj \
-            -scheme WebDriverAgentRunner WebDriverAgentRunner id=UDID test
+            -scheme WebDriverAgentRunner WebDriverAgentRunner id=$(idevice_id -l) test
         """
+        self.run_background(['xcodebuild', '-project', 'WebDriverAgent.xcodeproj',
+                             '-scheme', 'WebDriverAgentRunner', 'WebDriverAgentRunner',
+                             'id='+self.udid, 'test'], cwd='Appium-WebDriverAgent')
+        self._wda_port = 8100
+        self._mjpeg_port = 9100
+        self.run_background(["iproxy", "8100", str(self._wda_port)])
+        self.run_background(["iproxy", "9100", str(self._mjpeg_port)])
+
+        self.wait_until_ready()
+
+    def run_background(self, *args, **kwargs):
+        p = subprocess.Popen(*args, **kwargs)
+        self._procs.append(p)
+
+    def wait_until_ready(self, timeout: float = 60.0):
+        for p in self._procs:
+            print(p.poll())
+        try:
+            ret = requests.get(
+                "http://localhost:{}/status".format(self._wda_port)).json()
+            print(ret)
+        except requests.ConnectionError:
+            pass
 
 
 def main():
     async def test():
         t = Tracker()
+        idevices = {}
         async for event in t.track_device():
             logger.debug("Event: %s", event)
+            if event.present:
+                idevices[event.udid] = d = IDevice(event.udid)
+                d.run_webdriveragent()
+            else:
+                idevices[event.udid].terminate()
 
     tornado.ioloop.IOLoop.current().run_sync(test)
 

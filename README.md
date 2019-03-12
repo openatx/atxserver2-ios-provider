@@ -12,12 +12,30 @@ Not implemented yet.
 所以这里的WebDriverAgent我们使用了appium修改的
 
 ## Install
+安装libimobiledevice工具包
+
+```bash
+brew uninstall --ignore-dependencies libimobiledevice
+brew uninstall --ignore-dependencies usbmuxd
+brew install --HEAD usbmuxd
+brew unlink usbmuxd
+brew link usbmuxd
+brew install --HEAD libimobiledevice
+brew install ideviceinstaller
+brew link --overwrite ideviceinstaller
+```
+
+下载安装atxserver2-ios-provider
+
 ```bash
 # clone code and init submodule(appium WebDriverAgent)
 git clone https://github.com/openatx/atxserver2-ios-provider --recursive
+# run the following commands if you forgot --recursive
+# git submodule init
+# git submodule update
 
 # initialize appium WebDriverAgent
-cd atxserver2-ios-provider/appium-wda
+cd atxserver2-ios-provider/Appium-WebDriverAgent
 ./Scripts/bootstrap.sh
 
 export USER_PORT=8100 # WDA监听端口
