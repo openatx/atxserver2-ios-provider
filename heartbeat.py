@@ -146,7 +146,7 @@ async def async_main():
         "udid": "kj3rklzvlkjsdfawefw",
         "colding": False,
         "provider": {
-            "wdaUrl": "http://"+current_ip()+":18000/127.0.0.1:8100"
+            "wdaUrl": "http://localhost:5600" # "http://"+current_ip()+":18000/127.0.0.1:8100"
         }
     })
     while True:
