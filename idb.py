@@ -2,6 +2,7 @@
 #
 # require: python >= 3.6
 
+import json
 import subprocess
 import time
 from collections import namedtuple
@@ -86,11 +87,9 @@ class Tracker():
         while True:
             backs, gones = await self.update()
             for udid in backs:
-                logger.info("Back online: %s", udid)
                 yield DeviceEvent(True, udid)
 
             for udid in gones:
-                logger.info("Went offline: %s", udid)
                 yield DeviceEvent(False, udid)
             await gen.sleep(1)
 
@@ -112,8 +111,11 @@ class IDevice(object):
         self._stopped = True
 
     def __repr__(self):
-        return "{udid}: {name} {product}".format(
-            udid=self.udid, name=self.name, product=self.product)
+        return "[{udid}:{name}-{product}]".format(
+            udid=self.udid[:5]+".."+self.udid[-2:], name=self.name, product=self.product)
+    
+    def __str__(self):
+        return repr(self)
 
     async def run_wda_forever(self, callback=None):
         """
@@ -124,13 +126,18 @@ class IDevice(object):
         callback = callback or (lambda event: None)
         while not self._stopped:
             callback("run")
+            start = time.time()
             ok = await self.run_webdriveragent()
             if not ok:
-                logger.warning("wda started failed, retry after 10s")
                 self.destroy()
-                await gen.sleep(10)
+                if time.time() - start < 5:
+                    logger.error("%s WDA unable to start", self)
+                    break
+                logger.warning("%s wda started failed, retry after 60s", self)
+                await gen.sleep(60)
                 continue
 
+            logger.info("%s wda lanuched", self)
             # check /status every 30s
             fail_cnt = 0
             while not self._stopped:
@@ -164,20 +171,24 @@ class IDevice(object):
         if self._procs:
             raise RuntimeError("should call destroy before run_webdriveragent")
 
-        self.run_background([
-            'xcodebuild', '-project', 'WebDriverAgent.xcodeproj', '-scheme',
-            'WebDriverAgentRunner', 'WebDriverAgentRunner', 'id=' + self.udid,
+        cmd = [
+            'xcodebuild', '-project', 'Appium-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
+            'WebDriverAgentRunner', "-destination", 'id=' + self.udid,
             'test'
-        ],
-                            cwd='Appium-WebDriverAgent')
+        ]
+        logger.debug("%s cmd: %s", self, subprocess.list2cmdline(cmd))
+        self.run_background(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) # cwd='Appium-WebDriverAgent')
         self._wda_port = freeport.get()
         self._mjpeg_port = freeport.get()
-        self.run_background(["iproxy", "8100", str(self._wda_port)])
-        self.run_background(["iproxy", "9100", str(self._mjpeg_port)])
+        self.run_background(["iproxy", str(self._wda_port), "8100"], silent=True)
+        self.run_background(["iproxy", str(self._mjpeg_port), "9100"], silent=True)
 
-        return self.wait_until_ready()
+        return await self.wait_until_ready()
 
     def run_background(self, *args, **kwargs):
+        if kwargs.pop("silent", False):
+            kwargs['stdout'] = subprocess.DEVNULL
+            kwargs['stderr'] = subprocess.DEVNULL
         p = subprocess.Popen(*args, **kwargs)
         self._procs.append(p)
 
@@ -188,7 +199,7 @@ class IDevice(object):
         """
         deadline = time.time() + timeout
         while time.time() < deadline and not self._stopped:
-            quited = any([p.poll() is None for p in self._procs])
+            quited = any([p.poll() is not None for p in self._procs])
             if quited:
                 return False
             if await self.ping_wda():
@@ -211,10 +222,14 @@ class IDevice(object):
                 url, connect_timeout=3, request_timeout=15)
             client = httpclient.AsyncHTTPClient()
             resp = await client.fetch(request)
-            logger.debug("wda status: %s", resp.response.body)
+            json.loads(resp.body)
+            # logger.debug("wda status: %s", resp.body)
             return True
         except httpclient.HTTPError as e:
             logger.debug("request wda/status error: %s", e)
+            return False
+        except Exception as e:
+            logger.warning("ping wda unknown error: %s %s", type(e), e)
             return False
 
     def destroy(self):
@@ -236,9 +251,9 @@ def main():
                 # start webdriveragent
                 def callback(status: str):
                     if status == "run":
-                        print(event.udid, "run")
+                        print(d, "run")
                     elif status == "ready":
-                        print(event.udid, "ready")
+                        logger.debug("%s %s", d, "healthcheck passed")
 
                 IOLoop.current().spawn_callback(d.run_wda_forever, callback)
             else:
