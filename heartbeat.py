@@ -66,8 +66,9 @@ class HeartbeatConnection(object):
                     await self._ws.write_message(v)
                 continue
 
-            udid = message['udid']
-            update_recursive(self._db, {udid: message})
+            if 'udid' in message:  # ping消息不包含在裡面
+                udid = message['udid']
+                update_recursive(self._db, {udid: message})
             self._queue.task_done()
 
             if self._ws:
@@ -146,7 +147,8 @@ async def async_main():
         "udid": "kj3rklzvlkjsdfawefw",
         "colding": False,
         "provider": {
-            "wdaUrl": "http://localhost:5600" # "http://"+current_ip()+":18000/127.0.0.1:8100"
+            "wdaUrl":
+            "http://localhost:5600"  # "http://"+current_ip()+":18000/127.0.0.1:8100"
         }
     })
     while True:
