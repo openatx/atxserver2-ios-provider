@@ -11,6 +11,7 @@ const express = require("express")
 const proxy = require("express-http-proxy")
 const request = require("request")
 const cors = require("cors")
+const program = require("commander")
 
 const MjpegConsumer = require('mjpeg-consumer')
 const websocketStream = require('websocket-stream/stream');
@@ -46,7 +47,9 @@ let mjpegStream = null
 
 // mjpeg stream to websocket stream
 app.ws('/screen', function (ws, req) {
-    const stream = websocketStream(ws, { binary: true })
+    const stream = websocketStream(ws, {
+        binary: true
+    })
 
     clientCount += 1
     if (clientCount === 1) {
@@ -78,8 +81,13 @@ app.ws('/screen', function (ws, req) {
 
 app.use("/", proxy(wdaServerUrl))
 
+program
+    .version("0.1.0")
+    .option("-p, --port <port>", "listen port", parseInt)
+    .parse(process.argv)
 
+console.log(program.port)
 
-app.listen(port, () => {
-    console.log("Listen on port", port)
-})
+// app.listen(port, () => {
+//     console.log("Listen on port", port)
+// })

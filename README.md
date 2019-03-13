@@ -30,22 +30,30 @@ brew link --overwrite ideviceinstaller
 ```bash
 # clone code and init submodule(appium WebDriverAgent)
 git clone https://github.com/openatx/atxserver2-ios-provider --recursive
+cd atxserver2-ios-provider
 # run the following commands if you forgot --recursive
 # git submodule init
 # git submodule update
 
 # initialize appium WebDriverAgent
-cd atxserver2-ios-provider/Appium-WebDriverAgent
+cd Appium-WebDriverAgent
 ./Scripts/bootstrap.sh
 
 export USER_PORT=8100 # WDA监听端口
 export MJPEG_SERVER_PORT=9100 # MJPEG-SERVER端口
 
+# test if wda can run?
 xcodebuild -project WebDriverAgent.xcodeproj \
            -scheme WebDriverAgentRunner \
            -destination 'platform=iOS Simulator,name=iPhone 6' \
            test
 ```
+
+**iOS真机配置**
+
+有条件的话还是弄一个苹果的开发者证书比较方便。个人可以用免费的证书(需要修改BundleID)，另外隔几天证书就会过期。
+
+请参考该文档配置e https://testerhome.com/topics/7220
 
 ## Developer 开发人员备注
 appium-WebDriverAgent一些[API说明](WDA-API.md)
