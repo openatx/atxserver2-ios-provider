@@ -208,6 +208,7 @@ class IDevice(object):
         if kwargs.pop("silent", False):
             kwargs['stdout'] = subprocess.DEVNULL
             kwargs['stderr'] = subprocess.DEVNULL
+        logger.debug("exec: %s", subprocess.list2cmdline(args))
         p = subprocess.Popen(*args, **kwargs)
         self._procs.append(p)
 

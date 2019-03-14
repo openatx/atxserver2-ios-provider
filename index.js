@@ -48,7 +48,7 @@ function makeApp(wdaServerUrl, mjpegServerUrl) {
 
         clientCount += 1
         if (clientCount === 1) {
-            console.log(`http://10.240.173.218:${mjpegServerPort}`)
+            console.log("request "+ mjpegServerUrl)
             let req = request(mjpegServerUrl)
                 .on("error", () => {
                     console.log("request error")
