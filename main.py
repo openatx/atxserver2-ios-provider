@@ -65,7 +65,7 @@ async def device_watch():
                 if status == "run":
                     await hbc.device_update({
                         "udid": d.udid,
-                        "present": False,
+                        "provider": None, # no provider indicate not present
                         "colding": False,
                         "properties": {
                             "name": d.name,
@@ -77,15 +77,19 @@ async def device_watch():
                     logger.debug("%s %s", d, "healthcheck passed")
                     await hbc.device_update({
                         "udid": d.udid,
-                        "present": True,
                         "colding": False,
                         "provider": {
                             "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
                         }
                     })
-
+                elif status == "offline":
+                    await hbc.device_update({
+                        "udid": d.udid,
+                        "provider": None,
+                    })
+        
             IOLoop.current().spawn_callback(d.run_wda_forever, callback)
-        else:
+        else: # offline
             idevices[event.udid].stop()
             idevices.pop(event.udid)
 

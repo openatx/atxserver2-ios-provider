@@ -134,7 +134,7 @@ class IDevice(object):
             callback
         """
         # wda_fail_cnt = 0
-        callback = callback or (lambda event: None)
+        callback = gen.convert_yielded(callback or (lambda event: None)) # ensure future
         while not self._stopped:
             await callback("run")
             start = time.time()
@@ -150,9 +150,10 @@ class IDevice(object):
 
             logger.info("%s wda lanuched", self)
             # check /status every 30s
+            await callback("ready")
+            
             fail_cnt = 0
             while not self._stopped:
-                await callback("ready")
                 if await self.ping_wda():
                     if fail_cnt != 0:
                         logger.info("wda ping recovered")
@@ -167,6 +168,7 @@ class IDevice(object):
                         break
                     await gen.sleep(10)
             self.destroy()
+        await callback("offline")
         self.destroy()  # destroy twice to make sure no process left
 
     async def run_webdriveragent(self):
