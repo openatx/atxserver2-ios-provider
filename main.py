@@ -59,9 +59,9 @@ async def device_watch():
             idevices[event.udid] = d = idb.IDevice(event.udid)
 
             # start webdriveragent
-            def callback(status: str):
+            async def callback(status: str):
                 if status == "run":
-                    hbc.device_update({
+                    await hbc.device_update({
                         "udid": d.udid,
                         "present": False,
                         "colding": False,
@@ -73,7 +73,7 @@ async def device_watch():
                     print(d, "run")
                 elif status == "ready":
                     logger.debug("%s %s", d, "healthcheck passed")
-                    hbc.device_update({
+                    await hbc.device_update({
                         "udid": d.udid,
                         "present": True,
                         "colding": False,
