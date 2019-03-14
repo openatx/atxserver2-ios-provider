@@ -106,10 +106,15 @@ class IDevice(object):
         self.product = udid2product(udid)
         self._stopped = False
         self._procs = []
+        self._public_port = None
 
     @property
-    def udid(self):
+    def udid(self) -> str:
         return self.__udid
+
+    @property
+    def public_port(self):
+        return self._public_port
 
     def stop(self):
         self._stopped = True

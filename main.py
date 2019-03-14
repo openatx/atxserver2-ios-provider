@@ -13,6 +13,8 @@ from logzero import logger
 import idb
 import heartbeat
 
+from utils import current_ip
+
 idevices = {}
 hbc = None
 
@@ -77,6 +79,9 @@ async def device_watch():
                         "udid": d.udid,
                         "present": True,
                         "colding": False,
+                        "provider": {
+                            "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
+                        }
                     })
 
             IOLoop.current().spawn_callback(d.run_wda_forever, callback)
