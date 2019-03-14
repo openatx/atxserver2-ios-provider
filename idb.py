@@ -100,20 +100,26 @@ def track_devices():
 
 
 class IDevice(object):
-    def __init__(self, udid):
-        self.udid = udid
+    def __init__(self, udid: str):
+        self.__udid = udid
         self.name = udid2name(udid)
         self.product = udid2product(udid)
         self._stopped = False
         self._procs = []
+
+    @property
+    def udid(self):
+        return self.__udid
 
     def stop(self):
         self._stopped = True
 
     def __repr__(self):
         return "[{udid}:{name}-{product}]".format(
-            udid=self.udid[:5]+".."+self.udid[-2:], name=self.name, product=self.product)
-    
+            udid=self.udid[:5] + ".." + self.udid[-2:],
+            name=self.name,
+            product=self.product)
+
     def __str__(self):
         return repr(self)
 
@@ -172,17 +178,25 @@ class IDevice(object):
             raise RuntimeError("should call destroy before run_webdriveragent")
 
         cmd = [
-            'xcodebuild', '-project', 'Appium-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
-            'WebDriverAgentRunner', "-destination", 'id=' + self.udid,
-            'test'
+            'xcodebuild', '-project',
+            'Appium-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
+            'WebDriverAgentRunner', "-destination", 'id=' + self.udid, 'test'
         ]
         logger.debug("%s cmd: %s", self, subprocess.list2cmdline(cmd))
-        self.run_background(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) # cwd='Appium-WebDriverAgent')
+        self.run_background(
+            cmd, stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
         self._wda_port = freeport.get()
         self._mjpeg_port = freeport.get()
-        self.run_background(["iproxy", str(self._wda_port), "8100"], silent=True)
-        self.run_background(["iproxy", str(self._mjpeg_port), "9100"], silent=True)
-
+        self.run_background(
+            ["iproxy", str(self._wda_port), "8100", self.udid], silent=True)
+        self.run_background(
+            ["iproxy", str(self._mjpeg_port), "9100", self.udid], silent=True)
+        self._public_port = freeport.get()
+        self.run_background(
+            ["node", "index.js", "-p", str(self._public_port),
+                '--wda-url', "http://localhost:{}".format(self._wda_port),
+                "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)]) # yapf: disable
         return await self.wait_until_ready()
 
     def run_background(self, *args, **kwargs):
