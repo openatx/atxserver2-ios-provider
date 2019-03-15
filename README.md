@@ -42,6 +42,10 @@ cd Appium-WebDriverAgent
 export USER_PORT=8100 # WDA监听端口
 export MJPEG_SERVER_PORT=9100 # MJPEG-SERVER端口
 
+# 解锁keychain
+security unlock-keychain ~/Library/Keychains/login.keychain
+# security unlock-keychain -p $PASSWORD ~/Library/Keychains/login.keychain
+
 # test if wda can run?
 xcodebuild -project WebDriverAgent.xcodeproj \
            -scheme WebDriverAgentRunner \
