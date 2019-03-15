@@ -57,7 +57,7 @@ xcodebuild -project WebDriverAgent.xcodeproj \
 
 有条件的话还是弄一个苹果的开发者证书比较方便。个人可以用免费的证书(需要修改BundleID)，另外隔几天证书就会过期。
 
-请参考该文档配置e https://testerhome.com/topics/7220
+请参考该文档配置 https://testerhome.com/topics/7220
 
 ## Developer 开发人员备注
 appium-WebDriverAgent一些[API说明](WDA-API.md)

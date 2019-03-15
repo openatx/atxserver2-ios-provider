@@ -182,7 +182,7 @@ class IDevice(object):
         UDID=${UDID:?}
         xcodebuild -project WebDriverAgent.xcodeproj \
             -scheme WebDriverAgentRunner WebDriverAgentRunner id=$(idevice_id -l) test
-        
+
         Raises:
             RuntimeError
         """
@@ -219,10 +219,9 @@ class IDevice(object):
             self._wda_proxy_proc.terminate()
         self._wda_proxy_port = freeport.get()
         self._wda_proxy_proc = subprocess.Popen([
-            "node", "index.js", "-p", str(self._wda_proxy_port),
+            "node", "wdaproxy.js", "-p", str(self._wda_proxy_port),
             "--wda-url", "http://localhost:{}".format(self._wda_port),
-            "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)]) # yapf: disable
-
+            "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)])  # yapf: disable
 
     async def wait_until_ready(self, timeout: float = 60.0):
         """
@@ -266,6 +265,7 @@ class IDevice(object):
             logger.debug("request wda/status error: %s", e)
             return False
         except ConnectionResetError:
+            logger.debug("%s waiting for wda", self)
             return False
         except Exception as e:
             logger.warning("ping wda unknown error: %s %s", type(e), e)
@@ -281,35 +281,6 @@ class IDevice(object):
         self._procs = []
 
 
-def main():
-    idevices = {}
-
-    async def test():
-        print("test")
-        async for event in track_devices():
-            logger.debug("Event: %s", event)
-            if event.present:
-                idevices[event.udid] = d = IDevice(event.udid)
-
-                # start webdriveragent
-                def callback(status: str):
-                    if status == "run":
-                        print(d, "run")
-                    elif status == "ready":
-                        logger.debug("%s %s", d, "healthcheck passed")
-
-                IOLoop.current().spawn_callback(d.run_wda_forever, callback)
-            else:
-                idevices[event.udid].stop()
-                idevices.pop(event.udid)
-
-    try:
-        IOLoop.current().run_sync(test)
-    except KeyboardInterrupt:
-        IOLoop.current().stop()
-        for d in idevices.values():
-            d.destroy()
-
-
 if __name__ == "__main__":
-    main()
+    # main()
+    pass
