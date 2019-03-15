@@ -6,6 +6,7 @@ import argparse
 from tornado.ioloop import IOLoop
 import tornado.web
 from tornado import gen
+from tornado import httpclient
 from tornado.httpclient import AsyncHTTPClient
 from tornado.log import enable_pretty_logging
 from logzero import logger
@@ -39,6 +40,41 @@ class ProxyTesterhomeHandler(tornado.web.RequestHandler):
         raise gen.Return(response.body)
 
 
+class ColdingHandler(tornado.web.RequestHandler):
+    async def post(self, udid):
+        d = idevices.get(udid)
+        try:
+            if not d:
+                raise Exception("Device not found")
+
+            d.restart_wda_proxy()
+            wda_url = "http://{}:{}".format(current_ip(), d.public_port)
+            await d.wda_healthcheck()
+            await hbc.device_update({
+                "udid": udid,
+                "colding": False,
+                "provider": {
+                    "wdaUrl": wda_url,
+                }
+            })
+            self.write({
+                "success": True,
+                "description": "Device successfully colded"
+            })
+        except Exception as e:
+            logger.warning("colding procedure got error: %s", e)
+            self.set_status(400)  # bad request
+            self.write({
+                "success": False,
+                "description": "udid: %s not found" % udid
+            })
+
+
+class AppInstallHandler(tornado.web.RequestHandler):
+    def post(self):
+        raise NotImplementedError()
+
+
 def make_app(**settings):
     settings['template_path'] = 'templates'
     settings['static_path'] = 'static'
@@ -47,6 +83,8 @@ def make_app(**settings):
     return tornado.web.Application([
         (r"/", MainHandler),
         (r"/testerhome", ProxyTesterhomeHandler),
+        (r"/devices/([^/]+)/cold", ColdingHandler),
+        (r"/devices/([^/]+)/app/install", AppInstallHandler),
     ], **settings)
 
 
@@ -65,7 +103,7 @@ async def device_watch():
                 if status == "run":
                     await hbc.device_update({
                         "udid": d.udid,
-                        "provider": None, # no provider indicate not present
+                        "provider": None,  # no provider indicate not present
                         "colding": False,
                         "properties": {
                             "name": d.name,
@@ -81,15 +119,15 @@ async def device_watch():
                         "provider": {
                             "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
                         }
-                    })
+                    }) # yapf: disable
                 elif status == "offline":
                     await hbc.device_update({
                         "udid": d.udid,
                         "provider": None,
                     })
-        
+
             IOLoop.current().spawn_callback(d.run_wda_forever, callback)
-        else: # offline
+        else:  # offline
             idevices[event.udid].stop()
             idevices.pop(event.udid)
 
@@ -112,12 +150,12 @@ async def async_main():
     app.listen(args.port)
 
     global hbc
+    self_url = "http://{}:{}".format(current_ip(), args.port)
     server_addr = args.server.replace("http://", "").replace("/", "")
     hbc = await heartbeat.heartbeat_connect(
-        "ws://" + server_addr + "/websocket/heartbeat", platform='apple')
+        server_addr, platform='apple', self_url=self_url)
 
     await device_watch()
-    # IOLoop.current().spawn_callback(device_watch)
 
 
 if __name__ == "__main__":

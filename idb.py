@@ -110,7 +110,8 @@ class IDevice(object):
         self.product = udid2product(udid)
         self._stopped = False
         self._procs = []
-        self._public_port = None
+        self._wda_proxy_port = None
+        self._wda_proxy_proc = None
 
     @property
     def udid(self) -> str:
@@ -118,7 +119,7 @@ class IDevice(object):
 
     @property
     def public_port(self):
-        return self._public_port
+        return self._wda_proxy_port
 
     def stop(self):
         self._stopped = True
@@ -155,10 +156,10 @@ class IDevice(object):
             logger.info("%s wda lanuched", self)
             # check /status every 30s
             await callback("ready")
-            
+
             fail_cnt = 0
             while not self._stopped:
-                if await self.ping_wda():
+                if await self.wda_status():
                     if fail_cnt != 0:
                         logger.info("wda ping recovered")
                         fail_cnt = 0
@@ -193,7 +194,6 @@ class IDevice(object):
             'ATX-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
             'WebDriverAgentRunner', "-destination", 'id=' + self.udid, 'test'
         ]
-        logger.debug("%s cmd: %s", self, subprocess.list2cmdline(cmd))
         self.run_background(
             cmd, stdout=subprocess.DEVNULL,
             stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
@@ -203,20 +203,26 @@ class IDevice(object):
             ["iproxy", str(self._wda_port), "8100", self.udid], silent=True)
         self.run_background(
             ["iproxy", str(self._mjpeg_port), "9100", self.udid], silent=True)
-        self._public_port = freeport.get()
-        self.run_background(
-            ["node", "index.js", "-p", str(self._public_port),
-                '--wda-url', "http://localhost:{}".format(self._wda_port),
-                "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)]) # yapf: disable
+        self.restart_wda_proxy()
         return await self.wait_until_ready()
 
     def run_background(self, *args, **kwargs):
         if kwargs.pop("silent", False):
             kwargs['stdout'] = subprocess.DEVNULL
             kwargs['stderr'] = subprocess.DEVNULL
-        logger.debug("exec: %s", subprocess.list2cmdline(args))
+        logger.debug("exec: %s", subprocess.list2cmdline(args[0]))
         p = subprocess.Popen(*args, **kwargs)
         self._procs.append(p)
+
+    def restart_wda_proxy(self):
+        if self._wda_proxy_proc:
+            self._wda_proxy_proc.terminate()
+        self._wda_proxy_port = freeport.get()
+        self._wda_proxy_proc = subprocess.Popen([
+            "node", "index.js", "-p", str(self._wda_proxy_port),
+            "--wda-url", "http://localhost:{}".format(self._wda_port),
+            "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)]) # yapf: disable
+
 
     async def wait_until_ready(self, timeout: float = 60.0):
         """
@@ -228,7 +234,7 @@ class IDevice(object):
             quited = any([p.poll() is not None for p in self._procs])
             if quited:
                 return False
-            if await self.ping_wda():
+            if await self.wda_status():
                 return True
             await gen.sleep(1)
         return False
@@ -237,15 +243,20 @@ class IDevice(object):
         self.destroy()
         return await self.run_webdriveragent()
 
-    async def ping_wda(self):
+    @property
+    def wda_device_url(self):
+        return "http://localhost:{}".format(self._wda_port)
+
+    async def wda_status(self):
         """
         Returns:
             bool
         """
         try:
-            url = "http://localhost:{}/status".format(self._wda_port)
             request = httpclient.HTTPRequest(
-                url, connect_timeout=3, request_timeout=15)
+                self.wda_device_url + "/status",
+                connect_timeout=3,
+                request_timeout=15)
             client = httpclient.AsyncHTTPClient()
             resp = await client.fetch(request)
             json.loads(resp.body)
@@ -254,9 +265,15 @@ class IDevice(object):
         except httpclient.HTTPError as e:
             logger.debug("request wda/status error: %s", e)
             return False
+        except ConnectionResetError:
+            return False
         except Exception as e:
             logger.warning("ping wda unknown error: %s %s", type(e), e)
             return False
+
+    async def wda_healthcheck(self):
+        client = httpclient.AsyncHTTPClient()
+        await client.fetch(self.wda_device_url + "/wda/healthcheck")
 
     def destroy(self):
         for p in self._procs:

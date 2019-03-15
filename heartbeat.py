@@ -1,7 +1,9 @@
 # coding: utf-8
 #
+# updated: 2019/03/13
 
 import json
+import re
 from collections import defaultdict
 
 from logzero import logger
@@ -13,8 +15,16 @@ from tornado import gen
 from utils import update_recursive, current_ip
 
 
-async def heartbeat_connect(*args, **kwargs):
-    hbc = HeartbeatConnection(*args, **kwargs)
+async def heartbeat_connect(server_url: str,
+                            self_url: str = "",
+                            secret: str = "",
+                            platform: str = "android",
+                            priority: int = 2):
+    addr = server_url.replace("http://", "").replace("/", "")
+    url = "ws://" + addr + "/websocket/heartbeat"
+    hbc = HeartbeatConnection(
+        url, secret, platform=platform, priority=priority)
+    hbc._provider_url = self_url
     await hbc.open()
     return hbc
 
@@ -32,11 +42,11 @@ class HeartbeatConnection(object):
     """
 
     def __init__(self,
-                 ws_url="ws://localhost:4000/websocket/heartbeat",
+                 url="ws://localhost:4000/websocket/heartbeat",
                  secret='',
                  platform='android',
                  priority=2):
-        self._ws_url = ws_url
+        self._ws_url = url
         self._provider_url = None
         self._name = "pyclient"
         self._owner = "nobody@nobody.io"
