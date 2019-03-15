@@ -99,6 +99,10 @@ def track_devices():
     return t.track_devices()
 
 
+async def nop_callback(*args, **kwargs):
+    pass
+
+
 class IDevice(object):
     def __init__(self, udid: str):
         self.__udid = udid
@@ -134,7 +138,7 @@ class IDevice(object):
             callback
         """
         # wda_fail_cnt = 0
-        callback = gen.convert_yielded(callback or (lambda event: None)) # ensure future
+        callback = callback or nop_callback
         while not self._stopped:
             await callback("run")
             start = time.time()
@@ -186,7 +190,7 @@ class IDevice(object):
 
         cmd = [
             'xcodebuild', '-project',
-            'Appium-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
+            'ATX-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
             'WebDriverAgentRunner', "-destination", 'id=' + self.udid, 'test'
         ]
         logger.debug("%s cmd: %s", self, subprocess.list2cmdline(cmd))
