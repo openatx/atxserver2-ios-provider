@@ -1,6 +1,7 @@
 # coding: utf-8
 #
 # updated: 2019/03/13
+# updated: 2019/03/18 add ping_interval
 
 import json
 import re
@@ -117,7 +118,7 @@ class HeartbeatConnection(object):
                 await gen.sleep(cnt + 1)
 
     async def _connect(self):
-        ws = await websocket.websocket_connect(self._ws_url)
+        ws = await websocket.websocket_connect(self._ws_url, ping_interval=3)
         ws.__class__ = SafeWebSocket
 
         await ws.write_message({

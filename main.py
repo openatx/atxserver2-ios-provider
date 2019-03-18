@@ -108,6 +108,7 @@ async def device_watch():
                         "properties": {
                             "name": d.name,
                             "product": d.product,
+                            "brand": "Apple",
                         }
                     })
                     print(d, "run")
