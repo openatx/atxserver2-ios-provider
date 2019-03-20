@@ -75,7 +75,6 @@ class Tracker():
     @gen.coroutine
     def update(self):
         """ Wired, can not use async here """
-        # await gen.sleep(1)
         lasts = self._lasts
         currs = yield self.list_devices()
         gones = set(lasts).difference(currs)  # 離線
@@ -154,9 +153,11 @@ class IDevice(object):
                 continue
 
             logger.info("%s wda lanuched", self)
-            # check /status every 30s
-            await callback("ready")
 
+            # wda_status() result stored in __wda_info
+            await callback("ready", self.__wda_info)
+
+            # check wda_status every 30s
             fail_cnt = 0
             while not self._stopped:
                 if await self.wda_status():
@@ -176,7 +177,7 @@ class IDevice(object):
         await callback("offline")
         self.destroy()  # destroy twice to make sure no process left
 
-    async def run_webdriveragent(self):
+    async def run_webdriveragent(self) -> bool:
         """
         UDID=$(idevice_id -l)
         UDID=${UDID:?}
@@ -223,7 +224,7 @@ class IDevice(object):
             "--wda-url", "http://localhost:{}".format(self._wda_port),
             "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)])  # yapf: disable
 
-    async def wait_until_ready(self, timeout: float = 60.0):
+    async def wait_until_ready(self, timeout: float = 60.0) -> bool:
         """
         Returns:
             bool
@@ -249,7 +250,7 @@ class IDevice(object):
     async def wda_status(self):
         """
         Returns:
-            bool
+            dict or None
         """
         try:
             request = httpclient.HTTPRequest(
@@ -258,18 +259,18 @@ class IDevice(object):
                 request_timeout=15)
             client = httpclient.AsyncHTTPClient()
             resp = await client.fetch(request)
-            json.loads(resp.body)
-            # logger.debug("wda status: %s", resp.body)
-            return True
+            info = json.loads(resp.body)
+            self.__wda_info = info
+            return info
         except httpclient.HTTPError as e:
             logger.debug("request wda/status error: %s", e)
-            return False
+            return None
         except ConnectionResetError:
             logger.debug("%s waiting for wda", self)
-            return False
+            return None
         except Exception as e:
             logger.warning("ping wda unknown error: %s %s", type(e), e)
-            return False
+            return None
 
     async def wda_healthcheck(self):
         client = httpclient.AsyncHTTPClient()

@@ -1,19 +1,19 @@
 from __future__ import print_function
 
-import os
 import argparse
+import os
+from collections import defaultdict
+from functools import partial
 
-from tornado.ioloop import IOLoop
 import tornado.web
-from tornado import gen
-from tornado import httpclient
-from tornado.httpclient import AsyncHTTPClient
-from tornado.log import enable_pretty_logging
 from logzero import logger
+from tornado import gen, httpclient
+from tornado.httpclient import AsyncHTTPClient
+from tornado.ioloop import IOLoop
+from tornado.log import enable_pretty_logging
 
-import idb
 import heartbeat
-
+import idb
 from utils import current_ip
 
 idevices = {}
@@ -99,7 +99,7 @@ async def device_watch():
             idevices[event.udid] = d = idb.IDevice(event.udid)
 
             # start webdriveragent
-            async def callback(status: str):
+            async def callback(d: idb.IDevice, status: str, info=None):
                 if status == "run":
                     await hbc.device_update({
                         "udid": d.udid,
@@ -114,11 +114,20 @@ async def device_watch():
                     print(d, "run")
                 elif status == "ready":
                     logger.debug("%s %s", d, "healthcheck passed")
+
+                    assert isinstance(info, dict)
+                    info = defaultdict(dict, info)
+
                     await hbc.device_update({
                         "udid": d.udid,
                         "colding": False,
                         "provider": {
                             "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
+                        },
+                        "properties": {
+                            "ip": info['value']['ios']['ip'],
+                            "version": info['value']['os']['version'],
+                            "sdkVersion": info['value']['os']['sdkVersion'],
                         }
                     }) # yapf: disable
                 elif status == "offline":
@@ -127,7 +136,8 @@ async def device_watch():
                         "provider": None,
                     })
 
-            IOLoop.current().spawn_callback(d.run_wda_forever, callback)
+            IOLoop.current().spawn_callback(d.run_wda_forever,
+                                            partial(callback, d))
         else:  # offline
             idevices[event.udid].stop()
             idevices.pop(event.udid)
