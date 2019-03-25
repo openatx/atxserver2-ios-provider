@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 from tornado.ioloop import IOLoop
 from logzero import logger
-from tornado import gen, httpclient
+from tornado import gen, httpclient, locks
 from tornado.concurrent import run_on_executor
 
 from freeport import freeport
@@ -103,7 +103,7 @@ async def nop_callback(*args, **kwargs):
 
 
 class IDevice(object):
-    def __init__(self, udid: str):
+    def __init__(self, udid: str, lock: locks.Lock):
         self.__udid = udid
         self.name = udid2name(udid)
         self.product = udid2product(udid)
@@ -111,6 +111,7 @@ class IDevice(object):
         self._procs = []
         self._wda_proxy_port = None
         self._wda_proxy_proc = None
+        self._lock = lock
 
     @property
     def udid(self) -> str:
@@ -145,7 +146,7 @@ class IDevice(object):
             ok = await self.run_webdriveragent()
             if not ok:
                 self.destroy()
-                if time.time() - start < 5:
+                if time.time() - start < 3:
                     logger.error("%s WDA unable to start", self)
                     break
                 logger.warning("%s wda started failed, retry after 60s", self)
@@ -190,22 +191,32 @@ class IDevice(object):
         if self._procs:
             raise RuntimeError("should call destroy before run_webdriveragent")
 
-        cmd = [
-            'xcodebuild', '-project',
-            'ATX-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
-            'WebDriverAgentRunner', "-destination", 'id=' + self.udid, 'test'
-        ]
-        self.run_background(
-            cmd, stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
-        self._wda_port = freeport.get()
-        self._mjpeg_port = freeport.get()
-        self.run_background(
-            ["iproxy", str(self._wda_port), "8100", self.udid], silent=True)
-        self.run_background(
-            ["iproxy", str(self._mjpeg_port), "9100", self.udid], silent=True)
-        self.restart_wda_proxy()
-        return await self.wait_until_ready()
+        async with self._lock:
+            # holding lock, because multi wda run will raise error
+            # Testing failed:
+            #    WebDriverAgentRunner-Runner.app encountered an error (Failed to install or launch the test
+            #    runner. (Underlying error: Only directories may be uploaded. Please try again with a directory
+            #    containing items to upload to the application_s sandbox.))
+            cmd = [
+                'xcodebuild', '-project',
+                'ATX-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
+                'WebDriverAgentRunner', "-destination", 'id=' + self.udid,
+                'test'
+            ]
+            self.run_background(
+                cmd, stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
+            self._wda_port = freeport.get()
+            self._mjpeg_port = freeport.get()
+            self.run_background(
+                ["iproxy", str(self._wda_port), "8100", self.udid],
+                silent=True)
+            self.run_background(
+                ["iproxy", str(self._mjpeg_port), "9100", self.udid],
+                silent=True)
+
+            self.restart_wda_proxy()
+            return await self.wait_until_ready()
 
     def run_background(self, *args, **kwargs):
         if kwargs.pop("silent", False):

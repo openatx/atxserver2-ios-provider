@@ -2,12 +2,13 @@ from __future__ import print_function
 
 import argparse
 import os
+import time
 from collections import defaultdict
 from functools import partial
 
 import tornado.web
 from logzero import logger
-from tornado import gen, httpclient
+from tornado import gen, httpclient, locks
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 from tornado.log import enable_pretty_logging
@@ -92,11 +93,12 @@ async def device_watch():
     """
     When iOS device plugin, launch WDA
     """
+    lock = locks.Lock()  # WDA launch one by one
 
     async for event in idb.track_devices():
         logger.debug("Event: %s", event)
         if event.present:
-            idevices[event.udid] = d = idb.IDevice(event.udid)
+            idevices[event.udid] = d = idb.IDevice(event.udid, lock=lock)
 
             # start webdriveragent
             async def callback(d: idb.IDevice, status: str, info=None):
