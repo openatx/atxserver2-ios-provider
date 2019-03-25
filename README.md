@@ -1,7 +1,5 @@
 # atxserver2-ios-provider
-Apple device provider for atxserver2
-
-Not implemented yet.
+Apple device provider for atxserver2. iOS真机管理
 
 ## Requirements
 - Python >= 3.6
@@ -25,7 +23,7 @@ brew install ideviceinstaller
 brew link --overwrite ideviceinstaller
 ```
 
-下载安装atxserver2-ios-provider
+下载安装atxserver2-ios-provider, 并初始化其中的ATX-WebDriverAgent
 
 ```bash
 # clone code and init submodule(appium WebDriverAgent)
@@ -35,29 +33,38 @@ cd atxserver2-ios-provider
 # git submodule init
 # git submodule update
 
-# initialize appium WebDriverAgent
-cd Appium-WebDriverAgent
+# initialize atx WebDriverAgent (fork of appium webdriveragent)
+cd ATX-WebDriverAgent
+brew install carthage
 ./Scripts/bootstrap.sh
+```
 
-export USER_PORT=8100 # WDA监听端口
-export MJPEG_SERVER_PORT=9100 # MJPEG-SERVER端口
+然后找台手机接到苹果电脑上。
+按照这个文档<https://testerhome.com/topics/7220> 对WebDriverAgent项目进行下设置。
+有条件的话还是弄一个苹果的开发者证书比较方便。个人可以用免费的证书(需要修改BundleID)，另外隔几天证书就会过期。
 
-# 解锁keychain
+每台设备都需要先用xcode，注册下，能跑起来WDA test，弄完之后接着往下看。
+
+命令行
+```bash
+# export USER_PORT=8100 # WDA监听端口
+# export MJPEG_SERVER_PORT=9100 # MJPEG-SERVER端口
+
+# 解锁keychain，防止签名权限不足问题
 security unlock-keychain ~/Library/Keychains/login.keychain
 # security unlock-keychain -p $PASSWORD ~/Library/Keychains/login.keychain
 
 # test if wda can run?
-xcodebuild -project WebDriverAgent.xcodeproj \
-           -scheme WebDriverAgentRunner \
-           -destination 'platform=iOS Simulator,name=iPhone 6' \
-           test
+# xcodebuild -project WebDriverAgent.xcodeproj \
+#            -scheme WebDriverAgentRunner \
+#            -destination 'platform=iOS Simulator,name=iPhone 6' \
+#            test
+
+SERVER_URL="http://localhost:4000" # 这里修改成atxserver2的地址
+python3 main.py -s $SERVER_URL
 ```
 
-**iOS真机配置**
 
-有条件的话还是弄一个苹果的开发者证书比较方便。个人可以用免费的证书(需要修改BundleID)，另外隔几天证书就会过期。
-
-请参考该文档配置 https://testerhome.com/topics/7220
 
 ## Developer 开发人员备注
 appium-WebDriverAgent一些[API说明](WDA-API.md)
