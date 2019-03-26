@@ -144,7 +144,7 @@ class AppInstallHandler(CorsMixin, tornado.web.RequestHandler):
                 "output": output
             }
         except Exception as e:
-            return {"success": False, "description": str(e)}
+            return {"success": False, "status": 500, "description": str(e)}
         finally:
             tfile.close()
 
@@ -154,6 +154,8 @@ class AppInstallHandler(CorsMixin, tornado.web.RequestHandler):
         url = self.get_argument("url")
         device = idevices[udid]
         ret = yield self.app_install(device.udid, url)
+        if not ret['success']:
+            self.set_status(ret.get("status", 400))  # default bad request
         self.write(ret)
 
 
