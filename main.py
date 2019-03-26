@@ -2,13 +2,19 @@ from __future__ import print_function
 
 import argparse
 import os
+import shutil
+import subprocess
+import tempfile
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
+import requests
 import tornado.web
 from logzero import logger
 from tornado import gen, httpclient, locks
+from tornado.concurrent import run_on_executor
 from tornado.httpclient import AsyncHTTPClient
 from tornado.ioloop import IOLoop
 from tornado.log import enable_pretty_logging
@@ -19,6 +25,23 @@ from utils import current_ip
 
 idevices = {}
 hbc = None
+
+
+class CorsMixin(object):
+    CORS_ORIGIN = '*'
+    CORS_METHODS = 'GET,POST,OPTIONS'
+    CORS_CREDENTIALS = True
+    CORS_HEADERS = "x-requested-with,authorization"
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", self.CORS_ORIGIN)
+        self.set_header("Access-Control-Allow-Headers", self.CORS_HEADERS)
+        self.set_header('Access-Control-Allow-Methods', self.CORS_METHODS)
+
+    def options(self):
+        # no body
+        self.set_status(204)
+        self.finish()
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -42,7 +65,8 @@ class ProxyTesterhomeHandler(tornado.web.RequestHandler):
 
 
 class ColdingHandler(tornado.web.RequestHandler):
-    async def post(self, udid):
+    async def post(self, udid=None):
+        udid = udid or self.get_argument('udid')
         d = idevices.get(udid)
         try:
             if not d:
@@ -71,9 +95,66 @@ class ColdingHandler(tornado.web.RequestHandler):
             })
 
 
-class AppInstallHandler(tornado.web.RequestHandler):
+class AppInstallHandler(CorsMixin, tornado.web.RequestHandler):
+    executor = ThreadPoolExecutor(4)
+
+    @run_on_executor(executor='executor')
+    def app_install(self, udid: str, url: str):
+        try:
+            r = requests.get(url, stream=True)
+            if r.status_code != 200:
+                return {"success": False, "description": r.reason}
+        except Exception as e:
+            return {"success": False, "description": str(e)}
+
+        # tempfile.
+        logger.debug("%s app-install from %s", udid[:7], url)
+        tfile = tempfile.NamedTemporaryFile(
+            suffix=".ipa", prefix="tmpfile-", dir=os.getcwd())
+        try:
+            ipa_path = tfile.name
+            logger.debug("%s temp ipa path: %s", udid[:7], ipa_path)
+            # try:
+            # with open(ipa_path, "wb") as tfile:
+            content_length = int(r.headers.get("content-length", 0))
+            if content_length:
+                for chunk in r.iter_content(chunk_size=40960):
+                    tfile.write(chunk)
+            else:
+                shutil.copyfileobj(r.raw, tfile)
+
+            p = subprocess.Popen(
+                ["ideviceinstaller", "-u", udid, "-i", ipa_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT)
+            output = ""
+            for line in p.stdout:
+                line = line.decode('utf-8')
+                logger.debug("%s -- %s", udid[:7], line.strip())
+                output += line
+            success = "Complete" in output
+            exit_code = p.wait()
+
+            if not success:
+                return {"success": False, "description": output}
+            return {
+                "success": success,
+                # "bundleId": bundle_id,
+                "return": exit_code,
+                "output": output
+            }
+        except Exception as e:
+            return {"success": False, "description": str(e)}
+        finally:
+            tfile.close()
+
+    @gen.coroutine
     def post(self):
-        raise NotImplementedError()
+        udid = self.get_argument("udid")
+        url = self.get_argument("url")
+        device = idevices[udid]
+        ret = yield self.app_install(device.udid, url)
+        self.write(ret)
 
 
 def make_app(**settings):
@@ -86,6 +167,8 @@ def make_app(**settings):
         (r"/testerhome", ProxyTesterhomeHandler),
         (r"/devices/([^/]+)/cold", ColdingHandler),
         (r"/devices/([^/]+)/app/install", AppInstallHandler),
+        (r"/cold", ColdingHandler),
+        (r"/app/install", AppInstallHandler),
     ], **settings)
 
 

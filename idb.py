@@ -138,14 +138,21 @@ class IDevice(object):
         Args:
             callback
         """
-        # wda_fail_cnt = 0
         callback = callback or nop_callback
+
+        wda_fail_cnt = 0
         while not self._stopped:
             await callback("run")
             start = time.time()
             ok = await self.run_webdriveragent()
             if not ok:
                 self.destroy()
+
+                wda_fail_cnt += 1
+                if wda_fail_cnt > 3:
+                    logger.error("%s Run WDA failed. -_-!", self)
+                    return
+
                 if time.time() - start < 3:
                     logger.error("%s WDA unable to start", self)
                     break
@@ -153,30 +160,36 @@ class IDevice(object):
                 await gen.sleep(60)
                 continue
 
+            wda_fail_cnt = 0
             logger.info("%s wda lanuched", self)
 
             # wda_status() result stored in __wda_info
             await callback("ready", self.__wda_info)
+            await self.healthcheck()
 
-            # check wda_status every 30s
-            fail_cnt = 0
-            while not self._stopped:
-                if await self.wda_status():
-                    if fail_cnt != 0:
-                        logger.info("wda ping recovered")
-                        fail_cnt = 0
-                    await gen.sleep(30)
-                else:
-                    fail_cnt += 1
-                    logger.warning("wda ping error: %d", fail_cnt)
-                    if fail_cnt > 3:
-                        logger.warning(
-                            "ping wda fail too many times, restart wda")
-                        break
-                    await gen.sleep(10)
-            self.destroy()
         await callback("offline")
         self.destroy()  # destroy twice to make sure no process left
+
+    async def healthcheck(self):
+        """
+        check WebDriverAgent all the time
+        """
+        # check wda_status every 30s
+        fail_cnt = 0
+        while not self._stopped:
+            if await self.wda_status():
+                if fail_cnt != 0:
+                    logger.info("wda ping recovered")
+                    fail_cnt = 0
+                await gen.sleep(30)
+            else:
+                fail_cnt += 1
+                logger.warning("wda ping error: %d", fail_cnt)
+                if fail_cnt > 3:
+                    logger.warning("ping wda fail too many times, restart wda")
+                    break
+                await gen.sleep(10)
+        self.destroy()
 
     async def run_webdriveragent(self) -> bool:
         """
