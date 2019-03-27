@@ -181,6 +181,9 @@ async def device_watch():
     lock = locks.Lock()  # WDA launch one by one
 
     async for event in idb.track_devices():
+        if event.udid.startswith("ffffffffffffffffff"):
+            logger.debug("Invalid event: %s", event)
+            continue
         logger.debug("Event: %s", event)
         if event.present:
             idevices[event.udid] = d = idb.IDevice(event.udid, lock=lock)
