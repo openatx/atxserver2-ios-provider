@@ -174,6 +174,58 @@ def make_app(**settings):
     ], **settings)
 
 
+async def _device_callback(d: idb.IDevice, status: str, info=None):
+    if status == "run":
+        await hbc.device_update({
+            "udid": d.udid,
+            "provider": None,  # no provider indicate not present
+            "colding": False,
+            "properties": {
+                "name": d.name,
+                "product": d.product,
+                "brand": "Apple",
+            }
+        })
+        print(d, "run")
+    elif status == "ready":
+        logger.debug("%s %s", d, "healthcheck passed")
+
+        assert isinstance(info, dict)
+        info = defaultdict(dict, info)
+
+        await hbc.device_update({
+            "udid": d.udid,
+            "colding": False,
+            "provider": {
+                "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
+            },
+            "properties": {
+                "ip": info['value']['ios']['ip'],
+                "version": info['value']['os']['version'],
+                "sdkVersion": info['value']['os']['sdkVersion'],
+            }
+        }) # yapf: disable
+    elif status == "update":
+        assert isinstance(info, dict)
+        info = defaultdict(dict, info)
+
+        await hbc.device_update({
+            "udid": d.udid,
+            "properties": {
+                "ip": info['value']['ios']['ip'],
+                "version": info['value']['os']['version'],
+                "sdkVersion": info['value']['os']['sdkVersion'],
+            }
+        }) # yapf: disable
+    elif status == "offline":
+        await hbc.device_update({
+            "udid": d.udid,
+            "provider": None,
+        })
+    else:
+        logger.error("Unknown status: %s", status)
+
+
 async def device_watch():
     """
     When iOS device plugin, launch WDA
@@ -188,46 +240,8 @@ async def device_watch():
         if event.present:
             idevices[event.udid] = d = idb.IDevice(event.udid, lock=lock)
 
-            # start webdriveragent
-            async def callback(d: idb.IDevice, status: str, info=None):
-                if status == "run":
-                    await hbc.device_update({
-                        "udid": d.udid,
-                        "provider": None,  # no provider indicate not present
-                        "colding": False,
-                        "properties": {
-                            "name": d.name,
-                            "product": d.product,
-                            "brand": "Apple",
-                        }
-                    })
-                    print(d, "run")
-                elif status == "ready":
-                    logger.debug("%s %s", d, "healthcheck passed")
-
-                    assert isinstance(info, dict)
-                    info = defaultdict(dict, info)
-
-                    await hbc.device_update({
-                        "udid": d.udid,
-                        "colding": False,
-                        "provider": {
-                            "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
-                        },
-                        "properties": {
-                            "ip": info['value']['ios']['ip'],
-                            "version": info['value']['os']['version'],
-                            "sdkVersion": info['value']['os']['sdkVersion'],
-                        }
-                    }) # yapf: disable
-                elif status == "offline":
-                    await hbc.device_update({
-                        "udid": d.udid,
-                        "provider": None,
-                    })
-
             IOLoop.current().spawn_callback(d.run_wda_forever,
-                                            partial(callback, d))
+                                            partial(_device_callback, d))
         else:  # offline
             idevices[event.udid].stop()
             idevices.pop(event.udid)

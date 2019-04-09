@@ -40,24 +40,31 @@ def udid2name(udid: str) -> str:
 
 
 def udid2product(udid):
+    """
+    See also: https://www.theiphonewiki.com/wiki/Models
+    """
     pt = runcommand("ideviceinfo", "--udid", udid, "--key", "ProductType")
     models = {
         "iPhone8,1": "iPhone 6s",
         "iPhone8,2": "iPhone 6s Plus",
         "iPhone8,4": "iPhone SE",
-        "iPhone9,1": "iPhone 7",
-        "iPhone9,3": "iPhone 7",
-        "iPhone9,2": "iPhone 7 Plus",
-        "iPhone9,4": "iPhone 7 Plus",
-        "iPhone10,1": "iPhone 8",
-        "iPhone10,4": "iPhone 8",
-        "iPhone10,2": "iPhone 8 Plus",
-        "iPhone10,5": "iPhone 8 Plus",
-        "iPhone10,3": "iPhone X",
-        "iPhone10,6": "iPhone X",
+        "iPhone9,1": "iPhone 7",  # Global
+        "iPhone9,2": "iPhone 7 Plus",  # Global
+        "iPhone9,3": "iPhone 7",  # GSM
+        "iPhone9,4": "iPhone 7 Plus",  # GSM
+        "iPhone10,1": "iPhone 8",  # Global
+        "iPhone10,2": "iPhone 8 Plus",  # Global
+        "iPhone10,3": "iPhone X",  # Global
+        "iPhone10,4": "iPhone 8",  # GSM
+        "iPhone10,5": "iPhone 8 Plus",  # GSM
+        "iPhone10,6": "iPhone X",  # GSM
         "iPhone11,8": "iPhone XR",
         "iPhone11,2": "iPhone XS",
         "iPhone11,6": "iPhone XS Max",
+        "iPhone11,8": "iPhone XR",
+        # simulator
+        "i386": "iPhone Simulator",
+        "x86_64": "iPhone Simulator",
     }
     return models.get(pt, "Unknown")
 
@@ -165,22 +172,26 @@ class IDevice(object):
 
             # wda_status() result stored in __wda_info
             await callback("ready", self.__wda_info)
-            await self.healthcheck()
+            await self.healthcheck(callback)
 
         await callback("offline")
         self.destroy()  # destroy twice to make sure no process left
 
-    async def healthcheck(self):
+    async def healthcheck(self, callback):
         """
         check WebDriverAgent all the time
         """
         # check wda_status every 30s
         fail_cnt = 0
+        last_ip = self.device_ip
         while not self._stopped:
             if await self.wda_status():
                 if fail_cnt != 0:
                     logger.info("wda ping recovered")
                     fail_cnt = 0
+                if last_ip != self.device_ip:
+                    last_ip = self.device_ip
+                    await callback("update", self.__wda_info)
                 await gen.sleep(30)
             else:
                 fail_cnt += 1
@@ -190,6 +201,16 @@ class IDevice(object):
                     break
                 await gen.sleep(10)
         self.destroy()
+
+    @property
+    def device_ip(self):
+        """ get current device ip """
+        if not self.__wda_info:
+            return None
+        try:
+            return self.__wda_info['value']['ios']['ip']
+        except IndexError:
+            return None
 
     async def run_webdriveragent(self) -> bool:
         """
