@@ -1,6 +1,3 @@
-[submodule "Appium-WebDriverAgent"]
-	path = Appium-WebDriverAgent
-	url = https://github.com/appium/WebDriverAgent
 [submodule "ATX-WebDriverAgent"]
 	path = ATX-WebDriverAgent
 	url = https://github.com/openatx/WebDriverAgent
