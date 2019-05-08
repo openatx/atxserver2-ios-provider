@@ -204,7 +204,7 @@ async def _device_callback(d: idb.IDevice, status: str, info=None):
                 "version": info['value']['os']['version'],
                 "sdkVersion": info['value']['os']['sdkVersion'],
             }
-        }) # yapf: disable
+        })  # yapf: disable
     elif status == "update":
         assert isinstance(info, dict)
         info = defaultdict(dict, info)
@@ -216,7 +216,7 @@ async def _device_callback(d: idb.IDevice, status: str, info=None):
                 "version": info['value']['os']['version'],
                 "sdkVersion": info['value']['os']['sdkVersion'],
             }
-        }) # yapf: disable
+        })  # yapf: disable
     elif status == "offline":
         await hbc.device_update({
             "udid": d.udid,
@@ -243,7 +243,7 @@ async def device_watch():
             IOLoop.current().spawn_callback(d.run_wda_forever,
                                             partial(_device_callback, d))
         else:  # offline
-            idevices[event.udid].stop()
+            await idevices[event.udid].stop()
             idevices.pop(event.udid)
 
 

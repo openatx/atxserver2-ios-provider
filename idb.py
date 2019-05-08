@@ -137,11 +137,11 @@ class IDevice(object):
     def public_port(self):
         return self._wda_proxy_port
 
-    def stop(self):
+    async def stop(self):
         self._stopped = True
         logger.debug("%s waiting wda stopped", self)
-        self._stop_event.wait()
-        logger.debug("%s wda stopped!")
+        await self._stop_event.wait()
+        logger.debug("%s wda stopped!", self)
 
     def __repr__(self):
         return "[{udid}:{name}-{product}]".format(
@@ -188,7 +188,7 @@ class IDevice(object):
 
         await callback("offline")
         self.destroy()  # destroy twice to make sure no process left
-        self._stop_event.set()
+        self._stop_event.set()  # no need await
 
     async def healthcheck(self, callback):
         """
