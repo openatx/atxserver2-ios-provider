@@ -139,7 +139,7 @@ class IDevice(object):
 
     async def stop(self):
         self._stopped = True
-        logger.debug("%s waiting wda stopped", self)
+        logger.debug("%s waiting for wda stopped ...", self)
         await self._stop_event.wait()
         logger.debug("%s wda stopped!", self)
 
@@ -176,7 +176,8 @@ class IDevice(object):
                     logger.error("%s WDA unable to start", self)
                     break
                 logger.warning("%s wda started failed, retry after 60s", self)
-                await gen.sleep(60)
+                if not self._stopped:
+                    await gen.sleep(60)
                 continue
 
             wda_fail_cnt = 0
