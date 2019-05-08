@@ -9,10 +9,10 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from tornado.ioloop import IOLoop
 from logzero import logger
 from tornado import gen, httpclient, locks
 from tornado.concurrent import run_on_executor
+from tornado.ioloop import IOLoop
 
 from freeport import freeport
 
@@ -126,7 +126,8 @@ class IDevice(object):
         self._procs = []
         self._wda_proxy_port = None
         self._wda_proxy_proc = None
-        self._lock = lock
+        self._lock = lock  # only allow one xcodebuild test run
+        self._stop_event = locks.Event()
 
     @property
     def udid(self) -> str:
@@ -138,6 +139,9 @@ class IDevice(object):
 
     def stop(self):
         self._stopped = True
+        logger.debug("%s waiting wda stopped", self)
+        self._stop_event.wait()
+        logger.debug("%s wda stopped!")
 
     def __repr__(self):
         return "[{udid}:{name}-{product}]".format(
@@ -184,6 +188,7 @@ class IDevice(object):
 
         await callback("offline")
         self.destroy()  # destroy twice to make sure no process left
+        self._stop_event.set()
 
     async def healthcheck(self, callback):
         """
