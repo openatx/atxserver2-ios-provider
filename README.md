@@ -16,9 +16,11 @@ Apple device provider for atxserver2. iOS真机管理
 ```bash
 brew uninstall --ignore-dependencies libimobiledevice
 brew uninstall --ignore-dependencies usbmuxd
+
 brew install --HEAD usbmuxd
 brew unlink usbmuxd
 brew link usbmuxd
+
 brew install --HEAD libimobiledevice
 brew install ideviceinstaller
 brew link --overwrite ideviceinstaller
@@ -54,6 +56,9 @@ brew install carthage
 ```bash
 # export USER_PORT=8100 # WDA监听端口
 # export MJPEG_SERVER_PORT=9100 # MJPEG-SERVER端口
+
+# 避免命令行运行出错，运行一次即可
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
 # 解锁keychain，防止签名权限不足问题
 security unlock-keychain ~/Library/Keychains/login.keychain
