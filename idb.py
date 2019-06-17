@@ -2,6 +2,7 @@
 #
 # require: python >= 3.6
 
+import base64
 import json
 import subprocess
 import time
@@ -14,7 +15,9 @@ from tornado import gen, httpclient, locks
 from tornado.concurrent import run_on_executor
 from tornado.ioloop import IOLoop
 
+from functools import partial
 from freeport import freeport
+from typing import Callable
 
 DeviceEvent = namedtuple('DeviceEvent', ['present', 'udid'])
 
@@ -118,7 +121,14 @@ async def nop_callback(*args, **kwargs):
 
 
 class IDevice(object):
-    def __init__(self, udid: str, lock: locks.Lock):
+    def __init__(self, udid: str, lock: locks.Lock, callback):
+        """
+        Args:
+            callback: function (str, dict) -> None
+        
+        Example callback:
+            callback("update", {"ip": "1.2.3.4"})
+        """
         self.__udid = udid
         self.name = udid2name(udid)
         self.product = udid2product(udid)
@@ -128,6 +138,7 @@ class IDevice(object):
         self._wda_proxy_proc = None
         self._lock = lock  # only allow one xcodebuild test run
         self._stop_event = locks.Event()
+        self._callback = partial(callback, self) or nop_callback
 
     @property
     def udid(self) -> str:
@@ -152,16 +163,14 @@ class IDevice(object):
     def __str__(self):
         return repr(self)
 
-    async def run_wda_forever(self, callback=None):
+    async def run_wda_forever(self):
         """
         Args:
             callback
         """
-        callback = callback or nop_callback
-
         wda_fail_cnt = 0
         while not self._stopped:
-            await callback("run")
+            await self._callback("run")
             start = time.time()
             ok = await self.run_webdriveragent()
             if not ok:
@@ -184,14 +193,19 @@ class IDevice(object):
             logger.info("%s wda lanuched", self)
 
             # wda_status() result stored in __wda_info
-            await callback("ready", self.__wda_info)
-            await self.healthcheck(callback)
+            await self._callback("ready", self.__wda_info)
+            await self.watch_wda_status()
 
-        await callback("offline")
+        await self._callback("offline")
         self.destroy()  # destroy twice to make sure no process left
         self._stop_event.set()  # no need await
 
-    async def healthcheck(self, callback):
+    def destroy(self):
+        for p in self._procs:
+            p.terminate()
+        self._procs = []
+
+    async def watch_wda_status(self):
         """
         check WebDriverAgent all the time
         """
@@ -205,7 +219,7 @@ class IDevice(object):
                     fail_cnt = 0
                 if last_ip != self.device_ip:
                     last_ip = self.device_ip
-                    await callback("update", self.__wda_info)
+                    await self._callback("update", self.__wda_info)
                 await gen.sleep(30)
             else:
                 fail_cnt += 1
@@ -330,15 +344,57 @@ class IDevice(object):
         except Exception as e:
             logger.warning("ping wda unknown error: %s %s", type(e), e)
             return None
+    
+    async def wda_screenshot_status(self):
+        """
+        Check if screenshot is working
+        Returns:
+            bool
+        """
+        try:
+            request = httpclient.HTTPRequest(
+                self.wda_device_url + "/screenshot",
+                connect_timeout=3,
+                request_timeout=15)
+            client = httpclient.AsyncHTTPClient()
+            resp = await client.fetch(request)
+            data = json.loads(resp.body)
+            raw_png_data = base64.b64decode(data['value'])
+            png_header = b"\x89PNG\r\n\x1a\n"
+            if not raw_png_data.startswith(png_header):
+                return False
+            return True
+        except Exception as e:
+            logger.warning("%s wda screenshot error: %s", self, e)
+            return False
+
+    async def is_wda_alive(self):
+        logger.debug("%s api check /status", self)
+        if not await self.wda_status():
+            return False
+
+        logger.debug("%s api check /screenshot", self)
+        if not await self.wda_screenshot_status():
+            return False
+        
+        return True
 
     async def wda_healthcheck(self):
         client = httpclient.AsyncHTTPClient()
-        await client.fetch(self.wda_device_url + "/wda/healthcheck")
+        
+        if not await self.is_wda_alive():
+            logger.warning("%s api check failed", self)
+            await self._callback("run")
+            if not await self.restart_wda():
+                logger.warning("%s wda recover in healthcheck failed", self)
+                return
+        else:
+            logger.debug("%s api check passed", self)
 
-    def destroy(self):
-        for p in self._procs:
-            p.terminate()
-        self._procs = []
+        await client.fetch(self.wda_device_url + "/wda/healthcheck")
+        
+            
+
 
 
 if __name__ == "__main__":

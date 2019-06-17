@@ -65,8 +65,11 @@ class ProxyTesterhomeHandler(tornado.web.RequestHandler):
 
 
 class ColdingHandler(tornado.web.RequestHandler):
+    """ reset device to clean state """
+
     async def post(self, udid=None):
-        udid = udid or self.get_argument('udid')
+        udid = udid or self.get_argument('udid', None)
+        assert udid
         d = idevices.get(udid)
         try:
             if not d:
@@ -109,8 +112,9 @@ class AppInstallHandler(CorsMixin, tornado.web.RequestHandler):
 
         # tempfile.
         logger.debug("%s app-install from %s", udid[:7], url)
-        tfile = tempfile.NamedTemporaryFile(
-            suffix=".ipa", prefix="tmpfile-", dir=os.getcwd())
+        tfile = tempfile.NamedTemporaryFile(suffix=".ipa",
+                                            prefix="tmpfile-",
+                                            dir=os.getcwd())
         try:
             ipa_path = tfile.name
             logger.debug("%s temp ipa path: %s", udid[:7], ipa_path)
@@ -175,6 +179,7 @@ def make_app(**settings):
 
 
 async def _device_callback(d: idb.IDevice, status: str, info=None):
+    """ monitor device status """
     if status == "run":
         await hbc.device_update({
             "udid": d.udid,
@@ -238,10 +243,10 @@ async def device_watch():
             continue
         logger.debug("Event: %s", event)
         if event.present:
-            idevices[event.udid] = d = idb.IDevice(event.udid, lock=lock)
-
-            IOLoop.current().spawn_callback(d.run_wda_forever,
-                                            partial(_device_callback, d))
+            idevices[event.udid] = d = idb.IDevice(event.udid,
+                                                   lock=lock,
+                                                   callback=_device_callback)
+            IOLoop.current().spawn_callback(d.run_wda_forever)
         else:  # offline
             await idevices[event.udid].stop()
             idevices.pop(event.udid)
@@ -250,12 +255,20 @@ async def device_watch():
 async def async_main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-        '-d', '--debug', action="store_true", help="enable debug mode")
-    parser.add_argument(
-        '-p', '--port', type=int, default=3600, help='listen port')
-    parser.add_argument(
-        "-s", "--server", type=str, required=True, help="server address")
+    parser.add_argument('-d',
+                        '--debug',
+                        action="store_true",
+                        help="enable debug mode")
+    parser.add_argument('-p',
+                        '--port',
+                        type=int,
+                        default=3600,
+                        help='listen port')
+    parser.add_argument("-s",
+                        "--server",
+                        type=str,
+                        required=True,
+                        help="server address")
 
     args = parser.parse_args()
 
@@ -267,8 +280,9 @@ async def async_main():
     global hbc
     self_url = "http://{}:{}".format(current_ip(), args.port)
     server_addr = args.server.replace("http://", "").replace("/", "")
-    hbc = await heartbeat.heartbeat_connect(
-        server_addr, platform='apple', self_url=self_url)
+    hbc = await heartbeat.heartbeat_connect(server_addr,
+                                            platform='apple',
+                                            self_url=self_url)
 
     await device_watch()
 
