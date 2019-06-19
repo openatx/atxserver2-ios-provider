@@ -223,7 +223,7 @@ class IDevice(object):
                 await gen.sleep(30)
             else:
                 fail_cnt += 1
-                logger.warning("wda ping error: %d", fail_cnt)
+                logger.warning("%s wda ping error: %d", self, fail_cnt)
                 if fail_cnt > 3:
                     logger.warning("ping wda fail too many times, restart wda")
                     break
@@ -345,7 +345,7 @@ class IDevice(object):
             logger.warning("ping wda unknown error: %s %s", type(e), e)
             return None
     
-    async def wda_screenshot_status(self):
+    async def wda_screenshot_ok(self):
         """
         Check if screenshot is working
         Returns:
@@ -367,14 +367,25 @@ class IDevice(object):
         except Exception as e:
             logger.warning("%s wda screenshot error: %s", self, e)
             return False
+    
+    async def wda_session_ok(self):
+        """
+        check if session create ok
+        """
+        info = await self.wda_status()
+        if not info:
+            return False
+        if not info.get("sessionId"):
+            return False
+        return True
 
     async def is_wda_alive(self):
         logger.debug("%s api check /status", self)
-        if not await self.wda_status():
+        if not await self.wda_session_ok():
             return False
 
         logger.debug("%s api check /screenshot", self)
-        if not await self.wda_screenshot_status():
+        if not await self.wda_screenshot_ok():
             return False
         
         return True
