@@ -22,6 +22,7 @@ from tornado.log import enable_pretty_logging
 import heartbeat
 import idb
 from utils import current_ip
+from typing import Union
 
 idevices = {}
 hbc = None
@@ -178,9 +179,13 @@ def make_app(**settings):
     ], **settings)
 
 
-async def _device_callback(d: idb.IDevice, status: str, info=None):
+async def _device_callback(d: idb.WDADevice,
+                           status: str,
+                           info: Union[dict, None] = None):
     """ monitor device status """
-    if status == "run":
+    wd = idb.WDADevice
+
+    if status == wd.status_preparing:
         await hbc.device_update({
             "udid": d.udid,
             "provider": None,  # no provider indicate not present
@@ -191,16 +196,15 @@ async def _device_callback(d: idb.IDevice, status: str, info=None):
                 "brand": "Apple",
             }
         })
-        print(d, "run")
-    elif status == "ready":
+    elif status == wd.status_ready:
         logger.debug("%s %s", d, "healthcheck passed")
 
         assert isinstance(info, dict)
         info = defaultdict(dict, info)
 
         await hbc.device_update({
+            # "colding": False,
             "udid": d.udid,
-            "colding": False,
             "provider": {
                 "wdaUrl": "http://{}:{}".format(current_ip(), d.public_port)
             },
@@ -210,19 +214,7 @@ async def _device_callback(d: idb.IDevice, status: str, info=None):
                 "sdkVersion": info['value']['os']['sdkVersion'],
             }
         })  # yapf: disable
-    elif status == "update":
-        assert isinstance(info, dict)
-        info = defaultdict(dict, info)
-
-        await hbc.device_update({
-            "udid": d.udid,
-            "properties": {
-                "ip": info['value']['ios']['ip'],
-                "version": info['value']['os']['version'],
-                "sdkVersion": info['value']['os']['sdkVersion'],
-            }
-        })  # yapf: disable
-    elif status == "offline":
+    elif status == wd.status_fatal:
         await hbc.device_update({
             "udid": d.udid,
             "provider": None,
@@ -243,10 +235,9 @@ async def device_watch():
             continue
         logger.debug("Event: %s", event)
         if event.present:
-            idevices[event.udid] = d = idb.IDevice(event.udid,
-                                                   lock=lock,
-                                                   callback=_device_callback)
-            IOLoop.current().spawn_callback(d.run_wda_forever)
+            d = idb.WDADevice(event.udid, lock=lock, callback=_device_callback)
+            idevices[event.udid] = d
+            d.start()
         else:  # offline
             await idevices[event.udid].stop()
             idevices.pop(event.udid)

@@ -1,3 +1,4 @@
+
 # coding: utf-8
 #
 # require: python >= 3.6
@@ -8,16 +9,17 @@ import subprocess
 import time
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import Callable
 
+import tornado
 import requests
 from logzero import logger
 from tornado import gen, httpclient, locks
 from tornado.concurrent import run_on_executor
 from tornado.ioloop import IOLoop
 
-from functools import partial
 from freeport import freeport
-from typing import Callable
 
 DeviceEvent = namedtuple('DeviceEvent', ['present', 'udid'])
 
@@ -120,7 +122,25 @@ async def nop_callback(*args, **kwargs):
     pass
 
 
-class IDevice(object):
+class WDADevice(object):
+    """
+    Example usage:
+
+    lock = locks.Lock() # xcodebuild test is not support parallel run
+    
+    async def callback(device: WDADevice, status, info=None):
+        pass
+
+    d = WDADevice("xxxxxx-udid-xxxxx", lock, callback)
+    d.start()
+    await d.stop()
+    """
+
+    status_preparing = "preparing"
+    status_ready = "ready"
+    status_fatal = "fatal"
+
+
     def __init__(self, udid: str, lock: locks.Lock, callback):
         """
         Args:
@@ -132,12 +152,12 @@ class IDevice(object):
         self.__udid = udid
         self.name = udid2name(udid)
         self.product = udid2product(udid)
-        self._stopped = False
         self._procs = []
         self._wda_proxy_port = None
         self._wda_proxy_proc = None
         self._lock = lock  # only allow one xcodebuild test run
-        self._stop_event = locks.Event()
+        self._finished = locks.Event()
+        self._stop = locks.Event()
         self._callback = partial(callback, self) or nop_callback
 
     @property
@@ -148,12 +168,6 @@ class IDevice(object):
     def public_port(self):
         return self._wda_proxy_port
 
-    async def stop(self):
-        self._stopped = True
-        logger.debug("%s waiting for wda stopped ...", self)
-        await self._stop_event.wait()
-        logger.debug("%s wda stopped!", self)
-
     def __repr__(self):
         return "[{udid}:{name}-{product}]".format(
             udid=self.udid[:5] + ".." + self.udid[-2:],
@@ -162,6 +176,22 @@ class IDevice(object):
 
     def __str__(self):
         return repr(self)
+    
+        
+    def start(self):
+        """ start wda process and keep it running, until wda stopped too many times or stop() called """
+        self._stop.clear()
+        IOLoop.current().spawn_callback(self.run_wda_forever)
+
+    async def stop(self):
+        """ stop wda process """
+        if self._stop.is_set():
+            raise RuntimeError(self, "WDADevice is already stopped")
+        self._stop.set() # no need await
+        logger.debug("%s waiting for wda stopped ...", self)
+        await self._finished.wait()
+        logger.debug("%s wda stopped!", self)
+        self._finished.clear()
 
     async def run_wda_forever(self):
         """
@@ -169,8 +199,8 @@ class IDevice(object):
             callback
         """
         wda_fail_cnt = 0
-        while not self._stopped:
-            await self._callback("run")
+        while not self._stop.is_set():
+            await self._callback(self.status_preparing)
             start = time.time()
             ok = await self.run_webdriveragent()
             if not ok:
@@ -181,29 +211,37 @@ class IDevice(object):
                     logger.error("%s Run WDA failed. -_-!", self)
                     return
 
-                if time.time() - start < 3:
+                if time.time() - start < 3.0:
                     logger.error("%s WDA unable to start", self)
                     break
                 logger.warning("%s wda started failed, retry after 60s", self)
-                if not self._stopped:
-                    await gen.sleep(60)
-                continue
+                if not self._sleep(60):
+                    break
 
             wda_fail_cnt = 0
             logger.info("%s wda lanuched", self)
 
             # wda_status() result stored in __wda_info
-            await self._callback("ready", self.__wda_info)
+            await self._callback(self.status_ready, self.__wda_info)
             await self.watch_wda_status()
 
-        await self._callback("offline")
+        await self._callback(self.status_fatal)
         self.destroy()  # destroy twice to make sure no process left
-        self._stop_event.set()  # no need await
+        self._finished.set()  # no need await
 
     def destroy(self):
         for p in self._procs:
             p.terminate()
         self._procs = []
+    
+    async def _sleep(self, timeout: float):
+        """ return false when sleep stopped by _stop(Event) """
+        try:
+            timeout_timestamp = IOLoop.current().time() + timeout
+            await self._stop.wait(timeout_timestamp) # wired usage
+            return False
+        except tornado.util.TimeoutError:
+            return True
 
     async def watch_wda_status(self):
         """
@@ -212,22 +250,24 @@ class IDevice(object):
         # check wda_status every 30s
         fail_cnt = 0
         last_ip = self.device_ip
-        while not self._stopped:
+        while not self._stop.is_set():
             if await self.wda_status():
                 if fail_cnt != 0:
                     logger.info("wda ping recovered")
                     fail_cnt = 0
                 if last_ip != self.device_ip:
                     last_ip = self.device_ip
-                    await self._callback("update", self.__wda_info)
-                await gen.sleep(30)
+                    await self._callback(self.status_ready, self.__wda_info)
+                await self._sleep(60)
+                logger.debug("%s is fine", self)
             else:
                 fail_cnt += 1
                 logger.warning("%s wda ping error: %d", self, fail_cnt)
                 if fail_cnt > 3:
                     logger.warning("ping wda fail too many times, restart wda")
                     break
-                await gen.sleep(10)
+                await self._sleep(10)
+            
         self.destroy()
 
     @property
@@ -303,13 +343,13 @@ class IDevice(object):
             bool
         """
         deadline = time.time() + timeout
-        while time.time() < deadline and not self._stopped:
+        while time.time() < deadline and not self._stop.is_set():
             quited = any([p.poll() is not None for p in self._procs])
             if quited:
                 return False
             if await self.wda_status():
                 return True
-            await gen.sleep(1)
+            await self._sleep(1)
         return False
 
     async def restart_wda(self):
@@ -380,11 +420,11 @@ class IDevice(object):
         return True
 
     async def is_wda_alive(self):
-        logger.debug("%s api check /status", self)
+        logger.debug("%s check /status", self)
         if not await self.wda_session_ok():
             return False
 
-        logger.debug("%s api check /screenshot", self)
+        logger.debug("%s check /screenshot", self)
         if not await self.wda_screenshot_ok():
             return False
         
@@ -394,19 +434,17 @@ class IDevice(object):
         client = httpclient.AsyncHTTPClient()
         
         if not await self.is_wda_alive():
-            logger.warning("%s api check failed", self)
-            await self._callback("run")
+            logger.warning("%s check failed -_-!", self)
+            await self._callback(self.status_preparing)
             if not await self.restart_wda():
                 logger.warning("%s wda recover in healthcheck failed", self)
                 return
         else:
-            logger.debug("%s api check passed", self)
+            logger.debug("%s all check passed ^_^", self)
 
         await client.fetch(self.wda_device_url + "/wda/healthcheck")
         
             
-
-
 
 if __name__ == "__main__":
     # main()
