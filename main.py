@@ -223,7 +223,7 @@ async def _device_callback(d: idb.WDADevice,
         logger.error("Unknown status: %s", status)
 
 
-async def device_watch():
+async def device_watch(wda_directory: str):
     """
     When iOS device plugin, launch WDA
     """
@@ -236,6 +236,7 @@ async def device_watch():
         logger.debug("Event: %s", event)
         if event.present:
             d = idb.WDADevice(event.udid, lock=lock, callback=_device_callback)
+            d.wda_directory = wda_directory
             idevices[event.udid] = d
             d.start()
         else:  # offline
@@ -260,6 +261,10 @@ async def async_main():
                         type=str,
                         required=True,
                         help="server address")
+    parser.add_argument("-W",
+                        "--wda-directory",
+                        default="./ATX-WebDriverAgent",
+                        help="WebDriverAgent source directory")
 
     args = parser.parse_args()
 
@@ -275,7 +280,7 @@ async def async_main():
                                             platform='apple',
                                             self_url=self_url)
 
-    await device_watch()
+    await device_watch(args.wda_directory)
 
 
 if __name__ == "__main__":

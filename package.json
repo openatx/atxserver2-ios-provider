@@ -7,6 +7,7 @@
     "express-ws": "^4.0.0",
     "mjpeg-consumer": "^1.1.0",
     "request": "^2.88.0",
+    "usbmux": "^0.1.0",
     "websocket-stream": "^5.1.2"
   },
   "name": "atxserver2-ios-provider",

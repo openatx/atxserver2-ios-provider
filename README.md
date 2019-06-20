@@ -99,6 +99,12 @@ appium-WebDriverAgent一些[API说明](WDA-API.md)
 2. 亮度调到低（可以是最低）
 3. 自动锁定(Auto-Lock) 设置为 永不（Never）
 
+## References
+- https://iphonedevwiki.net/index.php/SSH_Over_USB
+- usbmux client
+
+    - nodejs: https://github.com/DeMille/node-usbmux
+    - python: https://github.com/nabla-c0d3/multcprelay
 
 # LICENSE
 [MIT](LICENSE)

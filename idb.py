@@ -1,10 +1,10 @@
-
 # coding: utf-8
 #
 # require: python >= 3.6
 
 import base64
 import json
+import os
 import subprocess
 import time
 from collections import namedtuple
@@ -140,7 +140,6 @@ class WDADevice(object):
     status_ready = "ready"
     status_fatal = "fatal"
 
-
     def __init__(self, udid: str, lock: locks.Lock, callback):
         """
         Args:
@@ -152,6 +151,7 @@ class WDADevice(object):
         self.__udid = udid
         self.name = udid2name(udid)
         self.product = udid2product(udid)
+        self.wda_directory = "./ATX-WebDriverAgent"
         self._procs = []
         self._wda_proxy_port = None
         self._wda_proxy_proc = None
@@ -169,15 +169,14 @@ class WDADevice(object):
         return self._wda_proxy_port
 
     def __repr__(self):
-        return "[{udid}:{name}-{product}]".format(
-            udid=self.udid[:5] + ".." + self.udid[-2:],
-            name=self.name,
-            product=self.product)
+        return "[{udid}:{name}-{product}]".format(udid=self.udid[:5] + ".." +
+                                                  self.udid[-2:],
+                                                  name=self.name,
+                                                  product=self.product)
 
     def __str__(self):
         return repr(self)
-    
-        
+
     def start(self):
         """ start wda process and keep it running, until wda stopped too many times or stop() called """
         self._stop.clear()
@@ -187,7 +186,7 @@ class WDADevice(object):
         """ stop wda process """
         if self._stop.is_set():
             raise RuntimeError(self, "WDADevice is already stopped")
-        self._stop.set() # no need await
+        self._stop.set()  # no need await
         logger.debug("%s waiting for wda stopped ...", self)
         await self._finished.wait()
         logger.debug("%s wda stopped!", self)
@@ -215,7 +214,7 @@ class WDADevice(object):
                     logger.error("%s WDA unable to start", self)
                     break
                 logger.warning("%s wda started failed, retry after 60s", self)
-                if not self._sleep(60):
+                if not await self._sleep(60):
                     break
 
             wda_fail_cnt = 0
@@ -233,12 +232,12 @@ class WDADevice(object):
         for p in self._procs:
             p.terminate()
         self._procs = []
-    
+
     async def _sleep(self, timeout: float):
         """ return false when sleep stopped by _stop(Event) """
         try:
             timeout_timestamp = IOLoop.current().time() + timeout
-            await self._stop.wait(timeout_timestamp) # wired usage
+            await self._stop.wait(timeout_timestamp)  # wired usage
             return False
         except tornado.util.TimeoutError:
             return True
@@ -267,7 +266,7 @@ class WDADevice(object):
                     logger.warning("ping wda fail too many times, restart wda")
                     break
                 await self._sleep(10)
-            
+
         self.destroy()
 
     @property
@@ -301,9 +300,9 @@ class WDADevice(object):
             #    containing items to upload to the application_s sandbox.))
             cmd = [
                 'xcodebuild', '-project',
-                'ATX-WebDriverAgent/WebDriverAgent.xcodeproj', '-scheme',
-                'WebDriverAgentRunner', "-destination", 'id=' + self.udid,
-                'test'
+                os.path.join(self.wda_directory, 'WebDriverAgent.xcodeproj'),
+                '-scheme', 'WebDriverAgentRunner', "-destination",
+                'id=' + self.udid, 'test'
             ]
             self.run_background(
                 cmd, stdout=subprocess.DEVNULL,
@@ -311,10 +310,12 @@ class WDADevice(object):
             self._wda_port = freeport.get()
             self._mjpeg_port = freeport.get()
             self.run_background(
-                ["iproxy", str(self._wda_port), "8100", self.udid],
+                ["./iproxy.sh",
+                 str(self._wda_port), "8100", self.udid],
                 silent=True)
             self.run_background(
-                ["iproxy", str(self._mjpeg_port), "9100", self.udid],
+                ["./iproxy.sh",
+                 str(self._mjpeg_port), "9100", self.udid],
                 silent=True)
 
             self.restart_wda_proxy()
@@ -335,7 +336,8 @@ class WDADevice(object):
         self._wda_proxy_proc = subprocess.Popen([
             "node", "wdaproxy.js", "-p", str(self._wda_proxy_port),
             "--wda-url", "http://localhost:{}".format(self._wda_port),
-            "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)])  # yapf: disable
+            "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)],
+            stdout=subprocess.DEVNULL)  # yapf: disable
 
     async def wait_until_ready(self, timeout: float = 60.0) -> bool:
         """
@@ -346,6 +348,8 @@ class WDADevice(object):
         while time.time() < deadline and not self._stop.is_set():
             quited = any([p.poll() is not None for p in self._procs])
             if quited:
+                logger.warning("%s process quit %s", self,
+                               [(p.pid, p.poll()) for p in self._procs])
                 return False
             if await self.wda_status():
                 return True
@@ -366,25 +370,25 @@ class WDADevice(object):
             dict or None
         """
         try:
-            request = httpclient.HTTPRequest(
-                self.wda_device_url + "/status",
-                connect_timeout=3,
-                request_timeout=15)
+            request = httpclient.HTTPRequest(self.wda_device_url + "/status",
+                                             connect_timeout=3,
+                                             request_timeout=15)
             client = httpclient.AsyncHTTPClient()
             resp = await client.fetch(request)
             info = json.loads(resp.body)
             self.__wda_info = info
             return info
         except httpclient.HTTPError as e:
-            logger.debug("request wda/status error: %s", e)
+            logger.debug("%s request wda/status error: %s", self, e)
             return None
-        except ConnectionResetError:
+        except (ConnectionResetError, ConnectionRefusedError):
             logger.debug("%s waiting for wda", self)
             return None
         except Exception as e:
-            logger.warning("ping wda unknown error: %s %s", type(e), e)
+            logger.warning("%s ping wda unknown error: %s %s", self, type(e),
+                           e)
             return None
-    
+
     async def wda_screenshot_ok(self):
         """
         Check if screenshot is working
@@ -392,10 +396,10 @@ class WDADevice(object):
             bool
         """
         try:
-            request = httpclient.HTTPRequest(
-                self.wda_device_url + "/screenshot",
-                connect_timeout=3,
-                request_timeout=15)
+            request = httpclient.HTTPRequest(self.wda_device_url +
+                                             "/screenshot",
+                                             connect_timeout=3,
+                                             request_timeout=15)
             client = httpclient.AsyncHTTPClient()
             resp = await client.fetch(request)
             data = json.loads(resp.body)
@@ -407,7 +411,7 @@ class WDADevice(object):
         except Exception as e:
             logger.warning("%s wda screenshot error: %s", self, e)
             return False
-    
+
     async def wda_session_ok(self):
         """
         check if session create ok
@@ -427,12 +431,12 @@ class WDADevice(object):
         logger.debug("%s check /screenshot", self)
         if not await self.wda_screenshot_ok():
             return False
-        
+
         return True
 
     async def wda_healthcheck(self):
         client = httpclient.AsyncHTTPClient()
-        
+
         if not await self.is_wda_alive():
             logger.warning("%s check failed -_-!", self)
             await self._callback(self.status_preparing)
@@ -443,8 +447,7 @@ class WDADevice(object):
             logger.debug("%s all check passed ^_^", self)
 
         await client.fetch(self.wda_device_url + "/wda/healthcheck")
-        
-            
+
 
 if __name__ == "__main__":
     # main()
