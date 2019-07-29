@@ -4,7 +4,7 @@ Apple device provider for atxserver2. iOS真机管理
 ## Requirements
 - Python >= 3.6
 - WebDriverAgent(appium)
-- NodeJS
+- NodeJS 8
 
 [Appium 1.9.0](https://testerhome.com/topics/16235) 在WDA中新增了一个 mjpegServer，这个用来做屏幕同步感觉很方便。
 
