@@ -259,6 +259,7 @@ async def async_main():
     parser.add_argument("-s",
                         "--server",
                         type=str,
+                        default="localhost:4000",
                         required=True,
                         help="server address")
     parser.add_argument("-W",

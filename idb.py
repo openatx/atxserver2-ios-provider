@@ -216,6 +216,7 @@ class WDADevice(object):
                 logger.warning("%s wda started failed, retry after 60s", self)
                 if not await self._sleep(60):
                     break
+                continue
 
             wda_fail_cnt = 0
             logger.info("%s wda lanuched", self)
