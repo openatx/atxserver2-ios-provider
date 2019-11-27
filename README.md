@@ -29,21 +29,22 @@ brew link --overwrite ideviceinstaller
 下载安装atxserver2-ios-provider, 并初始化其中的ATX-WebDriverAgent
 
 ```bash
-# clone code and init submodule(appium WebDriverAgent)
-git clone https://github.com/openatx/atxserver2-ios-provider --recursive
+git clone https://github.com/openatx/atxserver2-ios-provider
 cd atxserver2-ios-provider
-# run the following commands if you forgot --recursive
-# git submodule init
-# git submodule update
 
 # install dependencies
 pip3 install -r requirements.txt
-npm install
+npm install # 如遇到错误,请检查是否是NodeJS 8
+```
 
-# initialize atx WebDriverAgent (fork of appium webdriveragent)
-cd ATX-WebDriverAgent
+WebDriverAgent的初始化。目前项目中已有的WebDriverAgent有点老了。推荐使用appium的Fork的版本。
+
+```bash
 brew install carthage
-./Scripts/bootstrap.sh
+
+git clone https://github.com/appium/WebDriverAgent Appium-WebDriverAgent
+cd Appium-WebDriverAgent && ./Scripts/bootstrap.sh
+open WebDriverAgent.xcodeproj
 ```
 
 然后找台手机接到苹果电脑上。
