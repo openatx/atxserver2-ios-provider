@@ -260,11 +260,11 @@ async def async_main():
                         "--server",
                         type=str,
                         default="localhost:4000",
-                        required=True,
+                        required=False,
                         help="server address")
     parser.add_argument("-W",
                         "--wda-directory",
-                        default="./ATX-WebDriverAgent",
+                        default="./WebDriverAgent",
                         help="WebDriverAgent source directory")
 
     args = parser.parse_args()
