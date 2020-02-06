@@ -230,6 +230,7 @@ class WDADevice(object):
         self._finished.set()  # no need await
 
     def destroy(self):
+        logger.debug("terminate wda processes")
         for p in self._procs:
             p.terminate()
         self._procs = []
@@ -334,6 +335,7 @@ class WDADevice(object):
         if self._wda_proxy_proc:
             self._wda_proxy_proc.terminate()
         self._wda_proxy_port = freeport.get()
+        logger.debug("restart wdaproxy with port: %d", self._wda_proxy_port)
         self._wda_proxy_proc = subprocess.Popen([
             "node", "wdaproxy.js", "-p", str(self._wda_proxy_port),
             "--wda-url", "http://localhost:{}".format(self._wda_port),
