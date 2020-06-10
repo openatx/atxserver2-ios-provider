@@ -208,13 +208,13 @@ class WDADevice(object):
                 wda_fail_cnt += 1
                 if wda_fail_cnt > 3:
                     logger.error("%s Run WDA failed. -_-!", self)
-                    return
+                    break
 
                 if time.time() - start < 3.0:
                     logger.error("%s WDA unable to start", self)
                     break
-                logger.warning("%s wda started failed, retry after 60s", self)
-                if not await self._sleep(60):
+                logger.warning("%s wda started failed, retry after 10s", self)
+                if not await self._sleep(10):
                     break
                 continue
 
@@ -292,7 +292,8 @@ class WDADevice(object):
             RuntimeError
         """
         if self._procs:
-            raise RuntimeError("should call destroy before run_webdriveragent")
+            self.destroy() # hotfix
+            #raise RuntimeError("should call destroy before run_webdriveragent", self._procs)
 
         async with self._lock:
             # holding lock, because multi wda run will raise error
