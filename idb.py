@@ -301,12 +301,16 @@ class WDADevice(object):
             #    WebDriverAgentRunner-Runner.app encountered an error (Failed to install or launch the test
             #    runner. (Underlying error: Only directories may be uploaded. Please try again with a directory
             #    containing items to upload to the application_s sandbox.))
+            
             cmd = [
                 'xcodebuild', '-project',
                 os.path.join(self.wda_directory, 'WebDriverAgent.xcodeproj'),
                 '-scheme', 'WebDriverAgentRunner', "-destination",
                 'id=' + self.udid, 'test'
             ]
+            if os.getenv("TMQ") == "true":
+                cmd = ['tinstruments', '-u', self.udid, 'xcuitest']
+
             self.run_background(
                 cmd, stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
@@ -423,8 +427,8 @@ class WDADevice(object):
         info = await self.wda_status()
         if not info:
             return False
-        if not info.get("sessionId"):
-            return False
+        #if not info.get("sessionId"): # the latest wda /status has no sessionId
+        #    return False
         return True
 
     async def is_wda_alive(self):
