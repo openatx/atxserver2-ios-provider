@@ -76,7 +76,7 @@ class ColdingHandler(tornado.web.RequestHandler):
             if not d:
                 raise Exception("Device not found")
 
-            d.restart_wda_proxy()
+            d.restart_wda_proxy() # change wda public port
             wda_url = "http://{}:{}".format(current_ip(), d.public_port)
             await d.wda_healthcheck()
             await hbc.device_update({
@@ -260,11 +260,11 @@ async def async_main():
                         "--server",
                         type=str,
                         default="localhost:4000",
-                        required=True,
+                        required=False,
                         help="server address")
     parser.add_argument("-W",
                         "--wda-directory",
-                        default="./ATX-WebDriverAgent",
+                        default="./WebDriverAgent",
                         help="WebDriverAgent source directory")
 
     args = parser.parse_args()

@@ -72,7 +72,8 @@ security unlock-keychain ~/Library/Keychains/login.keychain
 #            test
 
 SERVER_URL="http://localhost:4000" # 这里修改成atxserver2的地址
-python3 main.py -s $SERVER_URL
+WDA_DIRECTORY="./Appium-WebDriverAgent" # WDA项目地址
+python3 main.py -s $SERVER_URL -W $WDA_DIRECTORY
 ```
 
 

@@ -213,13 +213,13 @@ class WDADevice(object):
                 wda_fail_cnt += 1
                 if wda_fail_cnt > 3:
                     logger.error("%s Run WDA failed. -_-!", self)
-                    return
+                    break
 
                 if time.time() - start < 3.0:
                     logger.error("%s WDA unable to start", self)
                     break
-                logger.warning("%s wda started failed, retry after 60s", self)
-                if not await self._sleep(60):
+                logger.warning("%s wda started failed, retry after 10s", self)
+                if not await self._sleep(10):
                     break
                 continue
 
@@ -235,6 +235,7 @@ class WDADevice(object):
         self._finished.set()  # no need await
 
     def destroy(self):
+        logger.debug("terminate wda processes")
         for p in self._procs:
             p.terminate()
         self._procs = []
@@ -296,7 +297,8 @@ class WDADevice(object):
             RuntimeError
         """
         if self._procs:
-            raise RuntimeError("should call destroy before run_webdriveragent")
+            self.destroy() # hotfix
+            #raise RuntimeError("should call destroy before run_webdriveragent", self._procs)
 
         async with self._lock:
             # holding lock, because multi wda run will raise error
@@ -304,12 +306,16 @@ class WDADevice(object):
             #    WebDriverAgentRunner-Runner.app encountered an error (Failed to install or launch the test
             #    runner. (Underlying error: Only directories may be uploaded. Please try again with a directory
             #    containing items to upload to the application_s sandbox.))
+            
             cmd = [
                 'xcodebuild', '-project',
                 os.path.join(self.wda_directory, 'WebDriverAgent.xcodeproj'),
                 '-scheme', 'WebDriverAgentRunner', "-destination",
                 'id=' + self.udid, 'test'
             ]
+            if os.getenv("TMQ") == "true":
+                cmd = ['tins', '-u', self.udid, 'xctest']
+
             self.run_background(
                 cmd, stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
@@ -339,6 +345,7 @@ class WDADevice(object):
         if self._wda_proxy_proc:
             self._wda_proxy_proc.terminate()
         self._wda_proxy_port = freeport.get()
+        logger.debug("restart wdaproxy with port: %d", self._wda_proxy_port)
         self._wda_proxy_proc = subprocess.Popen([
             "node", "wdaproxy.js", "-p", str(self._wda_proxy_port),
             "--wda-url", "http://localhost:{}".format(self._wda_port),
@@ -425,8 +432,8 @@ class WDADevice(object):
         info = await self.wda_status()
         if not info:
             return False
-        if not info.get("sessionId"):
-            return False
+        #if not info.get("sessionId"): # the latest wda /status has no sessionId
+        #    return False
         return True
 
     async def is_wda_alive(self):
