@@ -73,8 +73,13 @@ def udid2product(udid):
         "iPhone10,6": "iPhone X",  # GSM
         "iPhone11,8": "iPhone XR",
         "iPhone11,2": "iPhone XS",
+        "iPhone11,4": "iPhone XS Max",
         "iPhone11,6": "iPhone XS Max",
         "iPhone11,8": "iPhone XR",
+        "iPhone12,1": "iPhone 11",
+        "iPhone12,3": "iPhone 11 Pro",
+        "iPhone12,5": "iPhone 11 Pro Max",
+        "iPhone12,8": "iPhone SE 2nd",
         # simulator
         "i386": "iPhone Simulator",
         "x86_64": "iPhone Simulator",
