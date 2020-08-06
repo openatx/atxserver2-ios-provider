@@ -309,7 +309,7 @@ class WDADevice(object):
                 'id=' + self.udid, 'test'
             ]
             if os.getenv("TMQ") == "true":
-                cmd = ['tinstruments', '-u', self.udid, 'xcuitest']
+                cmd = ['tins', '-u', self.udid, 'xctest']
 
             self.run_background(
                 cmd, stdout=subprocess.DEVNULL,
