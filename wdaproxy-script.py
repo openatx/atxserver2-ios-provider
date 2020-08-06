@@ -116,6 +116,7 @@ class ReverseProxyHandler(CorsMixin, tornado.web.RequestHandler):
         url = self.TARGET_URL.lstrip("/") + request.uri
         async with self._default_http_client.stream(request.method,
                                                     url,
+                                                    headers=request.headers.get_all(),
                                                     data=request.body) as resp:
             self.set_status(resp.status_code)
             for k, v in resp.headers.items():
