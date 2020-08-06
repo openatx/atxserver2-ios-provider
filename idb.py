@@ -5,6 +5,7 @@
 import base64
 import json
 import os
+import sys
 import subprocess
 import time
 from collections import namedtuple
@@ -347,7 +348,8 @@ class WDADevice(object):
         self._wda_proxy_port = freeport.get()
         logger.debug("restart wdaproxy with port: %d", self._wda_proxy_port)
         self._wda_proxy_proc = subprocess.Popen([
-            "node", "wdaproxy.js", "-p", str(self._wda_proxy_port),
+            sys.executable, "-u", "wdaproxy-script.py", 
+            "-p", str(self._wda_proxy_port),
             "--wda-url", "http://localhost:{}".format(self._wda_port),
             "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)],
             stdout=subprocess.DEVNULL)  # yapf: disable

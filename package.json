@@ -1,14 +1,6 @@
 {
   "dependencies": {
-    "commander": "^2.19.0",
-    "cors": "^2.8.5",
-    "express": "^4.16.4",
-    "express-http-proxy": "^1.5.1",
-    "express-ws": "^4.0.0",
-    "mjpeg-consumer": "^1.1.0",
-    "request": "^2.88.0",
-    "usbmux": "^0.1.0",
-    "websocket-stream": "^5.1.2"
+    "usbmux": "^0.1.0"
   },
   "name": "atxserver2-ios-provider",
   "description": "Apple device provider for atxserver2",
