@@ -165,6 +165,10 @@ class WDADevice(object):
         self._finished = locks.Event()
         self._stop = locks.Event()
         self._callback = partial(callback, self) or nop_callback
+        self.manually_start_wda = False
+        self.use_tidevice = False
+        self.wda_bundle_pattern = "*WebDriverAgent*"
+
 
     @property
     def udid(self) -> str:
@@ -317,9 +321,19 @@ class WDADevice(object):
             if os.getenv("TMQ") == "true":
                 cmd = ['tins', '-u', self.udid, 'xctest']
 
-            self.run_background(
-                cmd, stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
+            if self.manually_start_wda:
+                logger.info("Got param --manually-start-wda , will not launch wda process")
+            elif self.use_tidevice:
+                # 明确使用 tidevice 命令启动 wda
+                logger.info("Got param --use-tidevice , use tidevice to launch wda")
+                tidevice_cmd = ['tidevice', '-u', self.udid, 'wdaproxy', '-B', self.wda_bundle_pattern, '--port', '0']
+                self.run_background(tidevice_cmd, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT)
+            else:
+                self.run_background(
+                    cmd, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
+
             self._wda_port = freeport.get()
             self._mjpeg_port = freeport.get()
             self.run_background(
