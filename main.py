@@ -223,7 +223,7 @@ async def _device_callback(d: idb.WDADevice,
         logger.error("Unknown status: %s", status)
 
 
-async def device_watch(wda_directory: str):
+async def device_watch(wda_directory: str, manually_start_wda: bool, use_tidevice: bool, wda_bundle_pattern: bool):
     """
     When iOS device plugin, launch WDA
     """
@@ -237,6 +237,9 @@ async def device_watch(wda_directory: str):
         if event.present:
             d = idb.WDADevice(event.udid, lock=lock, callback=_device_callback)
             d.wda_directory = wda_directory
+            d.manually_start_wda = manually_start_wda
+            d.use_tidevice = use_tidevice
+            d.wda_bundle_pattern = wda_bundle_pattern
             idevices[event.udid] = d
             d.start()
         else:  # offline
@@ -266,6 +269,18 @@ async def async_main():
                         "--wda-directory",
                         default="./WebDriverAgent",
                         help="WebDriverAgent source directory")
+    parser.add_argument("--manually-start-wda",
+                        action="store_true",
+                        help="Start wda manually like using tidevice(with xctest). Then atx won't start WebDriverAgent")
+    parser.add_argument("--use-tidevice",
+                        action="store_true",
+                        help="Start wda automatically using tidevice command. Only works when not using manually-start-wda")
+    parser.add_argument("--wda-bundle-pattern",
+                        type=str,
+                        default="*WebDriverAgent*",
+                        required=False,
+                        help="If using --use-tidevice, can override wda bundle name pattern manually")
+
 
     args = parser.parse_args()
 
@@ -281,7 +296,7 @@ async def async_main():
                                             platform='apple',
                                             self_url=self_url)
 
-    await device_watch(args.wda_directory)
+    await device_watch(args.wda_directory, args.manually_start_wda, args.use_tidevice, args.wda_bundle_pattern)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ cd atxserver2-ios-provider
 pip3 install -r requirements.txt
 npm install # 如遇到错误,请检查是否是NodeJS 8
 ```
+* 启动方式1：使用 xcode 工程自动启动 WebDriverAgent
 
 WebDriverAgent的初始化。目前项目中已有的WebDriverAgent有点老了。推荐使用appium的Fork的版本。
 
@@ -75,6 +76,30 @@ SERVER_URL="http://localhost:4000" # 这里修改成atxserver2的地址
 WDA_DIRECTORY="./Appium-WebDriverAgent" # WDA项目地址
 python3 main.py -s $SERVER_URL -W $WDA_DIRECTORY
 ```
+
+* 启动方式2：手动通过外部程序启动
+
+如果使用 tidevice 等别的方式手动启动 wda ，启动命令需加上 `--manually-start-wda` 阻止 atx 启动 wda。
+
+* 启动方式3：自动通过 [tidevice](https://github.com/alibaba/taobao-iphone-device) 启动
+
+好处：只要事先在手机上装好 wda ，电脑就可以不用再弄 wda 了。
+
+```bash
+pip3 install -U "tidevice[openssl]" # 安装 tidevice ，python 版本需要 > 3.6。详情参考 https://github.com/alibaba/taobao-iphone-device
+
+# 确认 tidevice 可用
+tidevice -v
+
+# 启动应用
+SERVER_URL="http://localhost:4000" # 这里修改成atxserver2的地址
+WDA_BUNDLE_PATTERN="*WebDriverAgent*" # WDA bundle id 通配符
+python3 main.py -s $SERVER_URL --use-tidevice --wda-bundle-pattern $WDA_BUNDLE_PATTERN
+```
+
+会自动通过 `tidevice -u <UUID> wdaproxy -B <WDA_BUNDLE_PATTERN> --port 0` 在连上设备后启动设备上的 wda 
+
+
 
 
 
