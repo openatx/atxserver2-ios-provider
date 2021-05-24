@@ -5,6 +5,7 @@
 import base64
 import json
 import os
+import re
 import sys
 import subprocess
 import time
@@ -38,11 +39,20 @@ def runcommand(*args) -> str:
 
 def list_devices():
     udids = runcommand('idevice_id', '-l').splitlines()
+    udid_sim = runcommand('xcrun', 'simctl', 'list', 'devices').splitlines()
+    p = re.compile(r'[(](.*?)[)]', re.S)
+    udids.extend([re.findall(p, i)[0] for i in udid_sim if 'Booted' in i])
     return udids
 
 
 def udid2name(udid: str) -> str:
-    return runcommand("idevicename", "-u", udid)
+    name = runcommand("idevicename", "-u", udid)
+    if not name:  # 模拟器
+        udid_sim = runcommand('xcrun', 'simctl', 'list', 'devices').splitlines()
+        for i in udid_sim:
+            if udid in i:
+                name = i[:i.index('(')].strip()
+    return name if name else udid
 
 
 def udid2product(udid):
@@ -76,15 +86,20 @@ def udid2product(udid):
         "iPhone11,2": "iPhone XS",
         "iPhone11,4": "iPhone XS Max",
         "iPhone11,6": "iPhone XS Max",
-        "iPhone11,8": "iPhone XR",
         "iPhone12,1": "iPhone 11",
         "iPhone12,3": "iPhone 11 Pro",
         "iPhone12,5": "iPhone 11 Pro Max",
         "iPhone12,8": "iPhone SE 2nd",
+        "iPhone13,1": "iPhone 12 mini",
+        "iPhone13,2": "iPhone 12",
+        "iPhone13,3": "iPhone 12 Pro",
+        "iPhone13,4": "iPhone 12 Pro Max",
         # simulator
         "i386": "iPhone Simulator",
         "x86_64": "iPhone Simulator",
     }
+    if not pt:
+        pt = "i386"
     return models.get(pt, "Unknown")
 
 
@@ -133,7 +148,7 @@ class WDADevice(object):
     Example usage:
 
     lock = locks.Lock() # xcodebuild test is not support parallel run
-    
+
     async def callback(device: WDADevice, status, info=None):
         pass
 
@@ -150,7 +165,7 @@ class WDADevice(object):
         """
         Args:
             callback: function (str, dict) -> None
-        
+
         Example callback:
             callback("update", {"ip": "1.2.3.4"})
         """
@@ -169,7 +184,6 @@ class WDADevice(object):
         self.use_tidevice = False
         self.wda_bundle_pattern = "*WebDriverAgent*"
 
-
     @property
     def udid(self) -> str:
         return self.__udid
@@ -180,7 +194,7 @@ class WDADevice(object):
 
     def __repr__(self):
         return "[{udid}:{name}-{product}]".format(udid=self.udid[:5] + ".." +
-                                                  self.udid[-2:],
+                                                       self.udid[-2:],
                                                   name=self.name,
                                                   product=self.product)
 
@@ -302,8 +316,8 @@ class WDADevice(object):
             RuntimeError
         """
         if self._procs:
-            self.destroy() # hotfix
-            #raise RuntimeError("should call destroy before run_webdriveragent", self._procs)
+            self.destroy()  # hotfix
+            # raise RuntimeError("should call destroy before run_webdriveragent", self._procs)
 
         async with self._lock:
             # holding lock, because multi wda run will raise error
@@ -311,13 +325,20 @@ class WDADevice(object):
             #    WebDriverAgentRunner-Runner.app encountered an error (Failed to install or launch the test
             #    runner. (Underlying error: Only directories may be uploaded. Please try again with a directory
             #    containing items to upload to the application_s sandbox.))
-            
+            self._wda_port = freeport.get()
+            self._mjpeg_port = freeport.get()
             cmd = [
                 'xcodebuild', '-project',
                 os.path.join(self.wda_directory, 'WebDriverAgent.xcodeproj'),
                 '-scheme', 'WebDriverAgentRunner', "-destination",
                 'id=' + self.udid, 'test'
             ]
+            if "Simulator" in self.product:  # 模拟器
+                cmd.extend([
+                    'USE_PORT=' + str(self._wda_port),
+                    'MJPEG_SERVER_PORT=' + str(self._mjpeg_port),
+                ])
+
             if os.getenv("TMQ") == "true":
                 cmd = ['tins', '-u', self.udid, 'xctest']
 
@@ -328,22 +349,20 @@ class WDADevice(object):
                 logger.info("Got param --use-tidevice , use tidevice to launch wda")
                 tidevice_cmd = ['tidevice', '-u', self.udid, 'wdaproxy', '-B', self.wda_bundle_pattern, '--port', '0']
                 self.run_background(tidevice_cmd, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.STDOUT)
+                                    stderr=subprocess.STDOUT)
             else:
                 self.run_background(
                     cmd, stdout=subprocess.DEVNULL,
                     stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
-
-            self._wda_port = freeport.get()
-            self._mjpeg_port = freeport.get()
-            self.run_background(
-                ["./iproxy.sh",
-                 str(self._wda_port), "8100", self.udid],
-                silent=True)
-            self.run_background(
-                ["./iproxy.sh",
-                 str(self._mjpeg_port), "9100", self.udid],
-                silent=True)
+            if "Simulator" not in self.product:
+                self.run_background(
+                    ["./iproxy.sh",
+                     str(self._wda_port), "8100", self.udid],
+                    silent=True)
+                self.run_background(
+                    ["./iproxy.sh",
+                     str(self._mjpeg_port), "9100", self.udid],
+                    silent=True)
 
             self.restart_wda_proxy()
             return await self.wait_until_ready()
@@ -362,7 +381,7 @@ class WDADevice(object):
         self._wda_proxy_port = freeport.get()
         logger.debug("restart wdaproxy with port: %d", self._wda_proxy_port)
         self._wda_proxy_proc = subprocess.Popen([
-            sys.executable, "-u", "wdaproxy-script.py", 
+            sys.executable, "-u", "wdaproxy-script.py",
             "-p", str(self._wda_proxy_port),
             "--wda-url", "http://localhost:{}".format(self._wda_port),
             "--mjpeg-url", "http://localhost:{}".format(self._mjpeg_port)],
