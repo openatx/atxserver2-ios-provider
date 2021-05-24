@@ -45,7 +45,7 @@ def list_devices():
     udids = [device.udid for device in devices]
     udid_sim = runcommand('xcrun', 'simctl', 'list', 'devices').splitlines()
     p = re.compile(r'[(](.*?)[)]', re.S)
-    udids.extend([re.findall(p, i)[0] for i in udid_sim if 'Booted' in i])
+    udids.extend([re.findall(p, i)[-2] for i in udid_sim if 'Booted' in i])
     return udids
 
 
@@ -290,7 +290,10 @@ class WDADevice(object):
         """
         check WebDriverAgent all the time
         """
-        # check wda_status every 30s
+        # check wda_status every 3
+        
+        
+        s
         fail_cnt = 0
         last_ip = self.device_ip
         while not self._stop.is_set():
