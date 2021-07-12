@@ -108,7 +108,7 @@ class ScreenWSHandler(CorsMixin, WebSocketHandler):
 
 # Ref: https://github.com/colevscode/quickproxy/blob/master/quickproxy/proxy.py
 class ReverseProxyHandler(CorsMixin, tornado.web.RequestHandler):
-    _default_http_client = httpx.AsyncClient()
+    _default_http_client = httpx.AsyncClient(timeout=60)
     TARGET_URL = None
 
     async def handle_request(self, request):
