@@ -293,7 +293,6 @@ class WDADevice(object):
         # check wda_status every 3
         
         
-        s
         fail_cnt = 0
         last_ip = self.device_ip
         while not self._stop.is_set():
