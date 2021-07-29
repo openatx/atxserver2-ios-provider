@@ -4,4 +4,6 @@
 
 [submodule "Appium-WebDriverAgent"]
 	path = Appium-WebDriverAgent
-	url = https://github.com/Vancheung/WebDriverAgent.git
+	url = https://github.com/Vancheung/WebDriverAgent
+[submodule]
+	Appium-WebDriverAgent = master
