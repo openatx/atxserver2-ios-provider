@@ -21,8 +21,11 @@ from tornado.concurrent import run_on_executor
 from tornado.ioloop import IOLoop
 
 from freeport import freeport
+from tidevice import Device
+from tidevice._usbmux import Usbmux
 
 DeviceEvent = namedtuple('DeviceEvent', ['present', 'udid'])
+um = Usbmux()
 
 
 def runcommand(*args) -> str:
@@ -37,19 +40,30 @@ def runcommand(*args) -> str:
 
 
 def list_devices():
-    udids = runcommand('idevice_id', '-l').splitlines()
+    devices = um.device_list()
+    udids = [device.udid for device in devices]
     return udids
 
 
 def udid2name(udid: str) -> str:
-    return runcommand("idevicename", "-u", udid)
+    devices = um.device_list()
+    for device in devices:
+        if device.udid == udid:
+            d = Device(device.udid)
+            return d.get_value(no_session=True).get('DeviceName')
+    return "Unknown"
 
 
 def udid2product(udid):
     """
     See also: https://www.theiphonewiki.com/wiki/Models
     """
-    pt = runcommand("ideviceinfo", "--udid", udid, "--key", "ProductType")
+    pt = ""
+    devices = um.device_list()
+    for device in devices:
+        if device.udid == udid:
+            d = Device(device.udid)
+            pt = d.get_value(no_session=True).get('ProductType')
     models = {
         "iPhone5,1": "iPhone 5",
         "iPhone5,2": "iPhone 5",
@@ -326,9 +340,9 @@ class WDADevice(object):
             elif self.use_tidevice:
                 # 明确使用 tidevice 命令启动 wda
                 logger.info("Got param --use-tidevice , use tidevice to launch wda")
-                tidevice_cmd = ['tidevice', '-u', self.udid, 'wdaproxy', '-B', self.wda_bundle_pattern, '--port', '0']
+                tidevice_cmd = ['tidevice', '-u', self.udid, 'xctest', '-B', self.wda_bundle_pattern]
                 self.run_background(tidevice_cmd, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.STDOUT)
+                                    stderr=subprocess.STDOUT)
             else:
                 self.run_background(
                     cmd, stdout=subprocess.DEVNULL,
@@ -337,12 +351,12 @@ class WDADevice(object):
             self._wda_port = freeport.get()
             self._mjpeg_port = freeport.get()
             self.run_background(
-                ["./iproxy.sh",
-                 str(self._wda_port), "8100", self.udid],
+                ["tidevice", '-u', self.udid, 'relay',
+                 str(self._wda_port), "8100"],
                 silent=True)
             self.run_background(
-                ["./iproxy.sh",
-                 str(self._mjpeg_port), "9100", self.udid],
+                ["tidevice", '-u', self.udid, 'relay',
+                 str(self._mjpeg_port), "9100"],
                 silent=True)
 
             self.restart_wda_proxy()
