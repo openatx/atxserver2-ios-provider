@@ -109,6 +109,8 @@ appium-WebDriverAgent一些[API说明](WDA-API.md)
 ## 设备设置
 参考: http://docs.quamotion.mobi/cloud/on-site/connecting-ios-devices/
 
+2022-01-05：目前已支持模拟器，可以直接使用无需安装 wda 。感谢 [@Vancheung](https://github.com/Vancheung) 提供的 [PR](https://github.com/openatx/atxserver2-ios-provider/pull/29)
+
 ### 连接iOS设备
 1. 确保设备已经解锁
 2. 使用数据线将苹果手机连接到电脑上（Mac）
