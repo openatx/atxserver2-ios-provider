@@ -5,6 +5,7 @@
 import base64
 import json
 import os
+import re
 import sys
 import subprocess
 import time
@@ -42,6 +43,9 @@ def runcommand(*args) -> str:
 def list_devices():
     devices = um.device_list()
     udids = [device.udid for device in devices]
+    udid_sim = runcommand('xcrun', 'simctl', 'list', 'devices').splitlines()
+    p = re.compile(r'[(](.*?)[)]', re.S)
+    udids.extend([re.findall(p, i)[-2] for i in udid_sim if 'Booted' in i])
     return udids
 
 
@@ -51,6 +55,11 @@ def udid2name(udid: str) -> str:
         if device.udid == udid:
             d = Device(device.udid)
             return d.get_value(no_session=True).get('DeviceName')
+    if not devices:  # 模拟器
+        udid_sim = runcommand('xcrun', 'simctl', 'list', 'devices').splitlines()
+        for i in udid_sim:
+            if udid in i:
+                return i[:i.index('(')].strip()
     return "Unknown"
 
 
@@ -86,7 +95,6 @@ def udid2product(udid):
         "iPhone10,4": "iPhone 8",  # GSM
         "iPhone10,5": "iPhone 8 Plus",  # GSM
         "iPhone10,6": "iPhone X",  # GSM
-        "iPhone11,8": "iPhone XR",
         "iPhone11,2": "iPhone XS",
         "iPhone11,4": "iPhone XS Max",
         "iPhone11,6": "iPhone XS Max",
@@ -95,10 +103,20 @@ def udid2product(udid):
         "iPhone12,3": "iPhone 11 Pro",
         "iPhone12,5": "iPhone 11 Pro Max",
         "iPhone12,8": "iPhone SE 2nd",
+        "iPhone13,1": "iPhone 12 mini",
+        "iPhone13,2": "iPhone 12",
+        "iPhone13,3": "iPhone 12 Pro",
+        "iPhone13,4": "iPhone 12 Pro Max",
+        "iPhone14,2": "iPhone 13 Pro",
+        "iPhone14,3": "iPhone 13 Pro Max",
+        "iPhone14,4": "iPhone 13 mini",
+        "iPhone14,5": "iPhone 13",
         # simulator
         "i386": "iPhone Simulator",
         "x86_64": "iPhone Simulator",
     }
+    if not pt:
+        pt = "i386"
     return models.get(pt, "Unknown")
 
 
@@ -325,13 +343,20 @@ class WDADevice(object):
             #    WebDriverAgentRunner-Runner.app encountered an error (Failed to install or launch the test
             #    runner. (Underlying error: Only directories may be uploaded. Please try again with a directory
             #    containing items to upload to the application_s sandbox.))
-            
+            self._wda_port = freeport.get()
+            self._mjpeg_port = freeport.get()
             cmd = [
                 'xcodebuild', '-project',
                 os.path.join(self.wda_directory, 'WebDriverAgent.xcodeproj'),
                 '-scheme', 'WebDriverAgentRunner', "-destination",
                 'id=' + self.udid, 'test'
             ]
+            if "Simulator" in self.product:  # 模拟器
+                cmd.extend([
+                    'USE_PORT=' + str(self._wda_port),
+                    'MJPEG_SERVER_PORT=' + str(self._mjpeg_port),
+                ])
+
             if os.getenv("TMQ") == "true":
                 cmd = ['tins', '-u', self.udid, 'xctest']
 
@@ -348,16 +373,15 @@ class WDADevice(object):
                     cmd, stdout=subprocess.DEVNULL,
                     stderr=subprocess.STDOUT)  # cwd='Appium-WebDriverAgent')
 
-            self._wda_port = freeport.get()
-            self._mjpeg_port = freeport.get()
-            self.run_background(
-                ["tidevice", '-u', self.udid, 'relay',
-                 str(self._wda_port), "8100"],
-                silent=True)
-            self.run_background(
-                ["tidevice", '-u', self.udid, 'relay',
-                 str(self._mjpeg_port), "9100"],
-                silent=True)
+            if "Simulator" not in self.product:
+                self.run_background(
+                    ["tidevice", '-u', self.udid, 'relay',
+                     str(self._wda_port), "8100"],
+                    silent=True)
+                self.run_background(
+                    ["tidevice", '-u', self.udid, 'relay',
+                     str(self._mjpeg_port), "9100"],
+                    silent=True)
 
             self.restart_wda_proxy()
             return await self.wait_until_ready()
