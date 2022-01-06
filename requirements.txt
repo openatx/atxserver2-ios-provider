@@ -2,3 +2,4 @@ tornado
 requests
 logzero
 tidevice
+httpx
