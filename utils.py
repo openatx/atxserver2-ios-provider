@@ -18,10 +18,17 @@ def current_ip():
 
 def update_recursive(d: dict, u: dict) -> dict:
     for k, v in u.items():
-        if isinstance(v, collections.Mapping):
-            d[k] = update_recursive(d.get(k) or {}, v)
+        # python3.10 后无法使用collections.Mapping, 使用collections.abc.Mapping
+        if(hasattr(collections,'Mapping')):
+            if isinstance(v, collections.Mapping):
+                d[k] = update_recursive(d.get(k) or {}, v)
+            else:
+                d[k] = v
         else:
-            d[k] = v
+            if isinstance(v, collections.abc.Mapping):
+                d[k] = update_recursive(d.get(k) or {}, v)
+            else:
+                d[k] = v
     return d
 
 

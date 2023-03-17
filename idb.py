@@ -114,6 +114,11 @@ def udid2product(udid):
         # simulator
         "i386": "iPhone Simulator",
         "x86_64": "iPhone Simulator",
+        "iPhone14,6": "iPhone SE (3rd generation)",
+        "iPhone14,7": "iPhone 14",
+        "iPhone14,8": "iPhone 14 Plus",
+        "iPhone15,2": "iPhone 14 Pro",
+        "iPhone15,3": "iPhone 14 Pro Max",
     }
     if not pt:
         pt = "i386"
