@@ -44,7 +44,7 @@ WebDriverAgent的初始化。目前项目中已有的WebDriverAgent有点老了�
 brew install carthage
 
 git clone https://github.com/appium/WebDriverAgent Appium-WebDriverAgent
-cd Appium-WebDriverAgent && ./Scripts/bootstrap.sh
+cd Appium-WebDriverAgent # && ./Scripts/bootstrap.sh, 最新代码已无此脚本
 open WebDriverAgent.xcodeproj
 ```
 
